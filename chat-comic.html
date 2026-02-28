@@ -1,0 +1,2038 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeShop AI - Chat Comic Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #FFFFFF; color: #111827; overflow: hidden; }
+        .weshop-shadow { box-shadow: 0 20px 50px rgba(0, 0, 0, 0.06); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        /* Chat Specific Styles */
+        .chat-bubble { max-width: 85%; line-height: 1.6; }
+        .chat-user { background-color: #7C3AED; color: white; border-radius: 24px 24px 4px 24px; }
+        .chat-ai { background-color: #F9FAFB; color: #1f2937; border: 1px solid #F3F4F6; border-radius: 24px 24px 24px 4px; }
+        
+        .typing-dot {
+            animation: typing 1.4s infinite ease-in-out;
+            background-color: #9CA3AF;
+        }
+        .typing-dot:nth-child(1) { animation-delay: 0s; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+
+        .layout-transition { transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+    </style>
+</head>
+<body class="flex h-screen bg-white">
+
+    <!-- Sidebar -->
+    <aside class="w-64 border-r border-gray-100 flex flex-col shrink-0">
+        <div class="p-6 flex items-center gap-2">
+            <div class="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white italic font-bold text-xl">W</div>
+            <span class="text-xl font-bold tracking-tight">WeShop AI</span>
+        </div>
+        <nav class="flex-1 pt-2">
+            <div class="px-6 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Workspace</div>
+            <a href="ai-comic.html" class="flex items-center px-6 py-3 text-sm font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors">
+                <i data-lucide="layout-template" class="w-4 h-4 mr-3"></i> Studio Mode
+            </a>
+            <a href="#" class="flex items-center px-6 py-3 text-sm font-semibold bg-purple-50 border-r-4 border-purple-600 text-purple-600">
+                <i data-lucide="message-square" class="w-4 h-4 mr-3"></i> Chat Mode
+            </a>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col bg-[#F9FAFB] relative h-screen">
+        <header class="h-16 shrink-0 flex items-center justify-between px-8 bg-white border-b border-gray-100">
+            <h1 class="text-lg font-bold text-gray-900">Co-create Story</h1>
+            
+            <div class="flex items-center gap-4">
+                <!-- Language Toggle -->
+                <div class="flex items-center bg-gray-50 border border-gray-200 rounded-lg p-1">
+                    <button class="px-2 py-1 text-[10px] font-bold rounded-md bg-white shadow-sm text-gray-800">中</button>
+                    <button class="px-2 py-1 text-[10px] font-bold rounded-md text-gray-400 hover:text-gray-600">EN</button>
+                </div>
+
+                <!-- API Key Input Exposed -->
+                <div class="flex items-center bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 focus-within:border-purple-400 focus-within:ring-2 focus-within:ring-purple-50 transition-all relative">
+                    <i data-lucide="key" class="w-4 h-4 text-gray-400 mr-2"></i>
+                    <input type="password" id="apiKeyInput" placeholder="Enter Gemini API Key..." class="bg-transparent border-none outline-none text-xs w-48 text-gray-700 placeholder-gray-400 pr-6" onblur="testApiKey()">
+                    <div id="apiKeyStatusCheck" class="absolute right-3 hidden">
+                        <i data-lucide="check" class="w-4 h-4 text-green-500"></i>
+                    </div>
+                    <div id="apiKeyStatusError" class="absolute right-3 hidden">
+                        <i data-lucide="x" class="w-4 h-4 text-red-500"></i>
+                    </div>
+                    <div id="apiKeyLoading" class="absolute right-3 hidden">
+                        <i data-lucide="loader-2" class="w-4 h-4 text-gray-400 animate-spin"></i>
+                    </div>
+                </div>
+
+                <div class="text-[10px] font-bold text-green-500 bg-green-50 px-2 py-1 rounded-full uppercase tracking-widest">Agent Online</div>
+                <div class="w-8 h-8 rounded-full bg-gray-200"></div>
+            </div>
+        </header>
+
+        <div class="flex-1 flex overflow-hidden p-6 gap-6 max-w-[1400px] mx-auto w-full relative justify-center">
+            
+            <!-- Left Column: Chat Interface -->
+            <!-- default width is full/centered when sidebar is hidden. 
+                 When sidebar appears, we change width to w-2/3 -->
+            <div id="mainChatArea" class="w-full max-w-3xl flex flex-col bg-white rounded-[32px] weshop-shadow border border-gray-100 overflow-hidden layout-transition">
+                
+                <!-- Chat Messages Area -->
+                <div id="chatHistory" class="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar scroll-smooth">
+                    <!-- Initial AI Greeting -->
+                    <div class="flex gap-4">
+                        <div class="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
+                            <i data-lucide="bot" class="w-5 h-5 text-purple-600"></i>
+                        </div>
+                        <div class="flex flex-col gap-1 max-w-[85%]">
+                            <span class="text-xs font-bold text-gray-400 ml-1">Comic Agent</span>
+                            <div class="chat-bubble chat-ai p-4 text-[15px] shadow-sm">
+                                你好！我是你的漫画创作顾问。<br><br>
+                                请告诉我你想讲一个什么样的故事？或者你有什么模糊的想法，我们一起来把它变成一部完整的漫画！
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="p-6 bg-white border-t border-gray-50 flex flex-col gap-3">
+                    <div class="flex gap-3 items-end bg-gray-50 p-2 rounded-[24px] border border-gray-100 focus-within:border-purple-300 focus-within:ring-4 focus-within:ring-purple-50 transition-all">
+                        <button class="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors">
+                            <i data-lucide="paperclip" class="w-5 h-5"></i>
+                        </button>
+                        <div class="flex-1 relative pb-1">
+                            <textarea id="chatInput" class="w-full bg-transparent p-2 text-[15px] text-gray-800 placeholder-gray-400 focus:outline-none resize-none no-scrollbar max-h-32" rows="1" placeholder="Type your story idea here..." oninput="autoResize(this)" onkeydown="handleEnter(event)"></textarea>
+                        </div>
+                        <button onclick="sendMessage()" class="w-10 h-10 rounded-full bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center shrink-0 transition-colors shadow-md shadow-purple-200 mb-0.5 mr-0.5">
+                            <i data-lucide="arrow-up" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+
+                    <!-- Workflow Actions -->
+                    <div class="flex items-center justify-between px-2">
+                        <div class="text-[11px] text-gray-400 font-medium">Press Enter to send, Shift + Enter for new line</div>
+                        <button onclick="startStoryWorkflow()" id="startWorkflowBtn" class="hidden bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-bold transition-all items-center gap-2">
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> 进入下一步 (Next Step)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Story State & Settings (Hidden Initially) -->
+            <div id="rightSidebar" class="w-1/3 flex-col gap-6 overflow-y-auto no-scrollbar layout-transition hidden opacity-0 translate-x-4">
+                
+                <!-- Story Outline Panel -->
+                <div class="bg-white rounded-[32px] weshop-shadow border border-gray-100 p-6 flex flex-col h-1/3 min-h-[200px]">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="book-open" class="w-4 h-4 text-purple-600"></i>
+                            <span class="text-sm font-bold text-gray-900">Expanded Story</span>
+                        </div>
+                        <button onclick="triggerStoryExpansion()" class="text-[10px] bg-purple-50 text-purple-600 px-2 py-1 rounded-md font-bold uppercase tracking-wide hover:bg-purple-100">
+                            Regenerate
+                        </button>
+                    </div>
+                    <textarea id="expandedStoryText" class="flex-1 bg-gray-50/50 rounded-2xl p-4 text-sm text-gray-600 border border-gray-100 resize-none outline-none focus:border-purple-200" placeholder="The expanded story will appear here..."></textarea>
+                </div>
+
+                <!-- Characters Panel -->
+                <div class="bg-white rounded-[32px] weshop-shadow border border-gray-100 p-6 flex-1 min-h-[250px] flex flex-col">
+                    <div class="flex items-center justify-between mb-5">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="users" class="w-4 h-4 text-purple-600"></i>
+                            <span class="text-sm font-bold text-gray-900">Characters & Design</span>
+                        </div>
+                        <button onclick="triggerCharacterGeneration()" class="text-[10px] bg-purple-600 text-white px-3 py-1.5 rounded-full font-bold uppercase tracking-wide hover:bg-purple-700 shadow-sm transition-all flex items-center gap-1 hidden" id="generateCharactersBtn">
+                            <i data-lucide="wand-2" class="w-3 h-3"></i> 生成角色设计图
+                        </button>
+                    </div>
+                    <div class="flex flex-col gap-3 flex-1 overflow-y-auto" id="characterList">
+                        <div class="text-xs text-gray-400 text-center py-4 italic" id="emptyCharState">
+                            No characters extracted yet.
+                        </div>
+                        <!-- Characters will be appended here -->
+                    </div>
+                </div>
+
+                <!-- Generation Settings -->
+                <div class="bg-white rounded-[32px] weshop-shadow border border-gray-100 p-6 shrink-0">
+                    <div class="space-y-4 mb-6">
+                        <!-- Character Settings Warning -->
+                        <div class="bg-purple-50 text-purple-700 text-[11px] p-3 rounded-xl border border-purple-100 flex gap-2 items-start">
+                            <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
+                            <p><strong>注意：</strong>下面这些选项仅供最终生成分镜故事本阶段使用，您可以随时修改。剧本确认后将以此为准开始绘制。</p>
+                        </div>
+                        
+                        <!-- Model Selection -->
+                        <div>
+                            <label class="text-[11px] font-bold text-gray-500 uppercase block mb-2">Image Model</label>
+                            <select id="imageModelSelect" class="w-full bg-gray-50 border border-gray-100 text-gray-700 text-xs font-bold rounded-xl px-4 py-2.5 outline-none cursor-pointer hover:border-purple-200 transition-colors">
+                                <option value="gemini-3.1-flash-image-preview">Nano 2 (Gemini 3.1 Flash Image)</option>
+                                <option value="gemini-3-pro-image-preview">Nano pro (Gemini 3 Pro Image)</option>
+                            </select>
+                        </div>
+                        <!-- Aspect Ratio Selection -->
+                        <div>
+                            <label class="text-[11px] font-bold text-gray-500 uppercase block mb-2">Aspect Ratio</label>
+                            <select id="aspectRatioSelect" class="w-full bg-gray-50 border border-gray-100 text-gray-700 text-xs font-bold rounded-xl px-4 py-2.5 outline-none cursor-pointer hover:border-purple-200 transition-colors">
+                                <option value="1:1">1:1 (Square)</option>
+                                <option value="3:4">3:4 (Standard Comic)</option>
+                                <option value="4:5">4:5 (Instagram)</option>
+                                <option value="9:16">9:16 (Webtoon)</option>
+                                <option value="16:9">16:9 (Cinematic)</option>
+                            </select>
+                        </div>
+                        <!-- Style Selection -->
+                        <div>
+                            <label class="text-[11px] font-bold text-gray-500 uppercase block mb-2">Art Style</label>
+                            <select id="artStyleSelect" class="w-full bg-gray-50 border border-gray-100 text-gray-700 text-xs font-bold rounded-xl px-4 py-2.5 outline-none cursor-pointer">
+                                <option value="Japanese manga style">Manga</option>
+                                <option value="Western superhero comic style">Western</option>
+                                <option value="Cinematic realistic style">Cinematic</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Page Count Options - Hidden and dynamically selected via chat -->
+                        <div class="hidden">
+                            <select id="pageCountSelect">
+                                <option value="5">5</option>
+                                <option value="10">10</option>
+                                <option value="15">15</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button id="generateComicBtn" onclick="triggerFinalGeneration()" class="w-full bg-[#111827] hover:bg-[#1f2937] text-white py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-gray-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i data-lucide="wand-2" class="w-4 h-4"></i>
+                        Generate Storyboard
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Comic Viewer Overlay -->
+    <div id="comicViewerOverlay" class="fixed inset-0 bg-white z-50 hidden flex">
+        <!-- Left Side: Comic Viewer -->
+        <div class="flex-1 bg-gray-50 h-full flex flex-col relative">
+            <div class="h-16 flex items-center px-6 border-b border-gray-200 bg-white shrink-0 justify-between">
+                <div class="font-bold text-lg">Final Comic</div>
+                <div class="flex gap-2">
+                    <button onclick="downloadCurrentPage()" class="text-xs bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold hover:bg-gray-50 transition-colors flex items-center gap-2">
+                        <i data-lucide="download" class="w-4 h-4"></i> 单页下载
+                    </button>
+                    <button onclick="downloadAllPages()" class="text-xs bg-purple-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-purple-700 transition-colors flex items-center gap-2">
+                        <i data-lucide="download-cloud" class="w-4 h-4"></i> 全部下载 (ZIP)
+                    </button>
+                    <button onclick="closeComicViewer()" class="ml-4 text-gray-400 hover:text-gray-800 transition-colors">
+                        <i data-lucide="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="flex-1 overflow-auto flex items-center justify-center p-8 relative group" id="comicViewerCanvas">
+                <!-- Image goes here -->
+                <img id="comicViewerImg" src="" class="max-w-full max-h-full object-contain shadow-2xl">
+                <!-- Navigation -->
+                <button onclick="prevComicPage()" id="prevPageBtn" class="absolute left-8 w-12 h-12 rounded-full bg-white/80 backdrop-blur shadow-lg flex items-center justify-center text-gray-800 hover:bg-white transition-all disabled:opacity-0 hidden group-hover:flex">
+                    <i data-lucide="chevron-left" class="w-6 h-6"></i>
+                </button>
+                <button onclick="nextComicPage()" id="nextPageBtn" class="absolute right-8 w-12 h-12 rounded-full bg-white/80 backdrop-blur shadow-lg flex items-center justify-center text-gray-800 hover:bg-white transition-all disabled:opacity-0 hidden group-hover:flex">
+                    <i data-lucide="chevron-right" class="w-6 h-6"></i>
+                </button>
+            </div>
+            <div class="h-14 flex items-center justify-center text-sm font-bold text-gray-500 gap-2 shrink-0 bg-white border-t border-gray-200">
+                <span id="comicPageIndicator">Page 1 / 5</span>
+            </div>
+        </div>
+        <!-- Right Side: Info & Chat -->
+        <div class="w-1/3 bg-white border-l border-gray-200 flex flex-col shadow-xl z-10 h-full relative">
+            <div class="p-6 border-b border-gray-100 shrink-0">
+                <h3 class="font-bold text-gray-900 mb-4 flex items-center justify-between">
+                    本页剧本设定
+                    <button onclick="regenerateCurrentPage()" class="text-xs bg-purple-100 text-purple-700 px-3 py-1.5 rounded-lg font-bold hover:bg-purple-200 transition-colors flex items-center gap-1">
+                        <i data-lucide="refresh-cw" class="w-3 h-3"></i> 重新生成此页
+                    </button>
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">画面动作与环境</label>
+                        <textarea id="viewerPageStory" class="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-xs text-gray-700 h-24 resize-none focus:outline-none focus:border-purple-300" readonly></textarea>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">对话内容</label>
+                        <textarea id="viewerPageDialogue" class="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-xs text-gray-700 h-20 resize-none focus:outline-none focus:border-purple-300" readonly></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-4 bg-gray-50" id="viewerChatHistory">
+                <div class="text-xs text-gray-400 text-center mt-4">在这里输入自然语言指令修改当前页面。</div>
+            </div>
+            <div class="p-4 bg-white border-t border-gray-100 shrink-0">
+                <div class="relative flex items-end bg-gray-50 rounded-[20px] p-2 border border-gray-200 focus-within:border-purple-400 focus-within:ring-4 focus-within:ring-purple-100/50 transition-all">
+                    <textarea id="viewerChatInput" class="w-full bg-transparent outline-none max-h-32 min-h-[44px] py-3 px-3 text-[15px] resize-none overflow-hidden placeholder-gray-400 text-gray-700" placeholder="例如：把背景换成晚上，角色在下雨..."></textarea>
+                    <button onclick="sendViewerMessage()" class="w-11 h-11 shrink-0 bg-purple-600 hover:bg-purple-700 text-white rounded-full flex items-center justify-center transition-all shadow-sm disabled:opacity-50">
+                        <i data-lucide="arrow-up" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overlay for API Status Progress -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-3xl p-6 shadow-2xl flex flex-col items-center min-w-[250px]">
+            <i data-lucide="loader-2" class="w-8 h-8 text-purple-600 animate-spin mb-3"></i>
+            <span id="loadingText" class="text-sm font-bold text-gray-800">Processing...</span>
+        </div>
+    </div>
+
+    <!-- =============== AGENT SYSTEM PROMPTS (用户可在此更新) =============== -->
+    <script>
+        const SYSTEM_PROMPTS = {
+            // 1. 发散故事 (Gemini 3 Flash) - 对话时使用
+            CHAT_BRAINSTORM: `你是一个漫画故事开发对话 Agent。你的职责是在正式进入漫画生成流程之前，通过多轮自然对话帮助用户明确创作方向与关键参数。你需要用自然、真实、像创意总监一样的语气与用户交流，而不是机械式提问。你必须理解用户的自然语言输入，并根据上下文判断下一步应该引导什么问题。
+
+核心目标：
+
+你需要依次确认以下信息：
+1. 用户是否需要故事扩写。
+2. 如果需要扩写，用户希望生成多少页漫画（默认选项仅提供 5 页 / 10 页 / 15 页）。
+3. 如果不需要扩写，根据故事长度与节奏推荐页数（只能推荐 5 / 10 / 15 之一），并允许用户修改。
+4. 漫画的目标受众是谁（从而决定画风与叙事密度）。
+5. 推荐三个适合的画风选项（允许“其他”，支持用户上传参考）。
+6. 用户是否需要在故事结构前先创建角色设定。
+
+对话规则：
+• 用户使用自然语言输入，你必须自行理解意图。
+• 不要一次性问完所有问题，要循序渐进。
+• 已确认的信息必须记住，不能反复询问或前后矛盾。
+• 保持专业、冷静、协作式语气，像一个经验丰富的创作导演。
+• 不要提及内部系统结构或后续流水线。
+• 不要解释你的推理过程。
+• 不要输出技术说明。
+
+页数逻辑：
+如果用户需要扩写故事，你必须询问页数，并且只提供以下默认选项：
+{
+  "question": "你希望这部漫画大概有多少页？",
+  "options": [
+    {"id": "pages_5", "label": "5 页（节奏紧凑，短篇）"},
+    {"id": "pages_10", "label": "10 页（完整起承转合）"},
+    {"id": "pages_15", "label": "15 页（更丰富的情节展开）"}
+  ]
+}
+
+如果用户不需要扩写：你需要根据故事长度与节奏自行判断推荐页数（只能在 5 / 10 / 15 中选择），用自然语言说明推荐理由，然后输出：
+{
+  "question": "根据故事节奏，我建议使用的页数是：",
+  "recommendation": "5 页 / 10 页 / 15 页（三选一）",
+  "options": [
+    {"id": "accept", "label": "可以，就按这个来"},
+    {"id": "adjust", "label": "我想改成其他页数"}
+  ]
+}
+
+目标受众确认：
+{
+  "question": "这部漫画主要面向哪类读者？",
+  "options": [
+    {"id": "kids", "label": "儿童（表达更直观，画面更夸张）"},
+    {"id": "teen", "label": "青少年 / 年轻读者（情绪更强，节奏更鲜明）"},
+    {"id": "adult", "label": "成年读者（主题更复杂，偏电影感）"},
+    {"id": "general", "label": "大众向"}
+  ]
+}
+
+画风选择（根据故事和受众动态推荐三种）：
+{
+  "question": "你更偏向哪种画风？",
+  "options": [
+    {"id": "style_cinematic", "label": "电影感半写实"},
+    {"id": "style_manga", "label": "表现力强的漫画风"},
+    {"id": "style_painterly", "label": "插画感绘本风"},
+    {"id": "style_other", "label": "其他（上传参考图）"}
+  ]
+}
+
+角色是否提前创建：
+{
+  "question": "是否需要先创建角色设定？",
+  "options": [
+    {"id": "char_yes", "label": "是，先做角色设计"},
+    {"id": "char_no", "label": "不用，直接进入故事结构"}
+  ]
+}
+
+重要约束：
+• 每次出现可选择内容时，必须用合法 JSON 输出选项。该 JSON 必须单独放在一行或代码块外，不要省略括号。
+• 不要在同一轮输出多个无关 JSON 块。
+• JSON 外可以有自然语言引导语，但必须简洁。
+• 不要使用 Markdown 渲染 JSON（直接输出原生 JSON）。
+• 不要解释内部机制。
+
+信息确认完成后的最后一步：
+在所有信息确认完成后，简要总结用户选择的所有核心参数，并必须输出以下包含 "summary" 字段的最终确认 JSON（这将作为系统参数传递给后续环节）：
+{
+  "question": "以上就是我们确认的创作方案，是否现在进入故事开发阶段？",
+  "options": [
+    {"id": "confirm_plan", "label": "确认方案，进入下一步"}
+  ],
+  "summary": {
+    "core_idea": "用户最核心的故事设定、主题、以及我们在对话中探讨出的具体情节细节（不限字数，越详细越好）",
+    "target_audience": "确认的受众群体",
+    "art_style": "确认的画风",
+    "pages": "确认的页数",
+    "pre_create_characters": true
+  }
+}
+注："pre_create_characters"必须是布尔值（true 或 false）。
+
+语气要求：
+你是一个专业的漫画创作顾问，冷静、清晰、有创意，但不过度夸张。对话自然、有温度，但保持节奏控制。`,
+            
+            // 2. 故事扩写 (Gemini 3.1 Pro) - 从聊天记录提取并扩写完整故事
+            STORY_EXPANSION: `你是一个故事扩写与叙事生成 Agent。用户输入可能是一句话故事、一个简要梗概、几个关键词、或一个自然语言需求（例如“创建一个包含三个角色的故事”“写一个发生在雨夜的复仇故事”）。你的任务是先判断用户输入属于“已有故事待扩写”还是“需求驱动从零生成”，然后产出一篇完整、连贯、可用于后续漫画分页与分镜结构化的故事正文。故事必须包含清晰的起、承、转、合四段叙事推进，并在文本中明确交代时间（可具体到日期/时段）、地点（具体场景与空间关系）、人物（角色数量与关系、动机与目标）、事件（关键冲突、行动链、因果关系与结果），且保证逻辑自洽、节奏有推进、冲突有升级、转折有因果、结尾有收束或余味。你不得输出分析、提问或解释流程；不得使用项目符号或编号列表；不得输出 JSON；只输出一篇连续的故事文本（可用自然分段，但不允许写“第一段/第二段”之类的标记），不限制篇幅但必须足够完整以支持后续拆分成多页漫画。若用户未指定风格、题材或结局走向，你应默认采用通用的电影化叙事表达（具备画面感、行动可视化、情绪可演绎、场景可落地），避免过多外貌描写（角色视觉将由设定图决定），更多用动作、对话倾向、行为选择与环境互动来刻画人物。若用户要求特定角色数量（如三个角色），必须严格满足且让每个角色在主线中有明确作用；若用户未给角色名，你需要自行命名并保持一致；若用户给出世界观或设定限制，必须遵守并在故事中自然体现。输出必须可直接交给后续“分页结构化 Agent”进行拆页与分板块拆解。`,
+            
+            // 修改故事 (Gemini 3.1 Pro)
+            STORY_REVISION: `你是一个故事修改 Agent。请根据用户提供的新修改意见，对当前的故事进行修改和重写。请遵循原有故事扩写的原则，输出一篇完整、连贯、可用于后续漫画结构化的连续故事正文。不要输出分析、解释或任何多余的对话，只输出修改后的完整故事文本。`,
+
+            // 3. 提取角色 (Gemini 3.1 Pro) - 从扩写的故事中提取角色列表
+            CHARACTER_EXTRACTION: `你是一个角色提取与视觉结构化 Agent。用户将提供一篇完整的故事文本（或是一段对话记录）。你的任务是从故事中提取所有对剧情有实质影响的角色，并为每个角色生成结构化的角色设定描述，包括叙事属性以及用于视觉绘制的关键生理特征信息。
+
+你必须输出严格合法的 JSON（UTF-8 编码）。只允许输出 JSON，不得包含额外文字、解释说明、Markdown 格式或尾随逗号。
+
+顶层必须输出一个 JSON 对象，包含以下字段：
+
+"project"（字符串；根据故事内容推断一个简洁的项目标题）
+"characters"（数组；包含多个角色对象）
+
+对于每个角色，必须包含以下字段：
+
+"name"（字符串；使用故事中出现的角色名称；若角色未命名但明显为独立个体，应生成一个合理且保持一致的名称）
+"role"（字符串；根据叙事功能判断，如 主角 / 反派 / 配角 等）
+"gender"（字符串；根据故事内容推断角色性别，如 男 / 女 / 未知 等）
+"species"（字符串；根据故事内容推断物种信息；若为动物，应尽可能具体，例如“家猫（短毛）”“流浪猫”“缅因猫”等，在合理可推断范围内细化）
+"relative_body_size"（字符串；相对于同故事其他角色的体型大小，如 small / medium / large，并在必要时基于行为或叙事给出简短判断依据）
+"apparent_age_stage"（字符串；如 幼年 / 青年 / 成熟期 / 老年 等，根据行为与叙事语境推断）
+"distinct_physical_traits"（数组；列出明显可用于绘制的生理特征，例如 毛发长度、体型类型、耳朵形态、尾巴粗细、是否有伤痕、步态异常、肌肉发达程度 等；不得凭空编造无依据的细节，但可以根据行为合理推断）
+"narrative_function"（字符串；说明该角色在故事中的作用以及其与核心冲突的关系）
+"core_traits"（数组；基于角色行为与对白语气提炼的性格特征，不得主观臆测）
+"motivations"（字符串；角色明确或隐含的驱动力）
+"arc_progression"（字符串；角色在故事中的变化、成长或揭示过程）
+"visual_energy_profile"（字符串；用中性视觉语言描述角色的身体姿态倾向、动作节奏、情绪外显程度、存在感强弱等，用于辅助视觉设计，但不得描述具体服装或五官细节）
+
+规则：
+
+只提取对剧情有实质影响的角色。
+不得虚构故事中不存在的角色。
+不得与故事情节矛盾。
+不得凭空添加具体颜色、服装、装饰等未被故事支持的设定。
+在故事明确指出物种（例如“三只猫”）的情况下，必须明确标注物种，并通过体型、年龄阶段或身体状态区分角色。
+角色名称必须保持一致。
+输出 JSON 必须结构完整、可解析、格式正确。
+
+输出结果必须可直接用于后续角色设计生成与漫画视觉渲染流程。`,
+            
+            // 4. 角色设计图 (Gemini 3 Pro Image Preview) - 生成角色的完整设定图提示词及图片
+            CHARACTER_DESIGN: `你是一个角色设计图生成 Agent。你的唯一任务是生成一个完整、可直接用于图像生成的角色设计图描述。输出必须是一个连续的、完整的图像生成描述段落。不得输出解释说明、分析过程、Markdown 格式、项目符号、编号列表或任何元信息。不得提问。不得说明你在做什么。必须直接描述正在被渲染的角色设计图。
+
+输入处理规则：
+
+用户可能提供纯文字描述、纯图像参考，或图像加文字说明。如果提供图像，你必须将其作为权威视觉基础，保留角色的核心身份特征，包括面部结构比例、五官关系、体型比例、轮廓特征、发型结构、材质逻辑、服装构造、配件位置、颜色分布等。不得重新设计、简化、风格化、夸张或改变角色身份。如果文字与图像同时存在，文字视为设计意图补充，但不得与图像内容产生矛盾。
+
+如果未提供图像，你必须自行构建完整且一致的视觉逻辑，确保解剖结构合理、材质表现真实、世界观统一、设计层级清晰。
+
+输出必须始终包含以下视觉内容（但不得以列表形式呈现，而必须自然融入描述段落中）：
+
+角色身份与视觉原型，通过具体可视化特征表达；完整的三视图（正面、侧面、背面）对齐展示；自然站姿（A 字站姿或放松站姿）；至少三种面部表情变化；清晰的面部结构逻辑（骨骼轮廓、比例关系）；头发结构与体积逻辑；完整的服装分层系统（内层、外层、结构件）；明确的材质区分与物理表面表现；清晰的主色、辅助色与强调色层级；关键元素的局部放大细节展示（如配件、纹理、连接结构等）；中性摄影棚光照（主光 + 边缘光 + 落地阴影）；干净背景（浅灰或极简渐变）；专业级角色设定图排版；超高分辨率、清晰对焦、制作级质量。
+
+质量控制规则：
+
+保持合理解剖比例，除非用户明确指定夸张风格。
+材质必须遵循物理光照逻辑。
+角色轮廓必须清晰可读。
+避免过度堆砌装饰。
+确保视觉层级明确。
+保证设计内部逻辑自洽。
+避免抽象形容词，使用具体可视化特征表达性格。
+若有图像参考，身份一致性优先于审美发挥。
+
+默认渲染标准（若未指定风格）：
+
+专业级角色设定图，三视图对齐，干净浅灰背景，柔和摄影棚光照，轻微边缘轮廓光，清晰投影，超精细纹理，电影级清晰度，制作级完成度。`,
+            
+            // 5. 故事分页 (Gemini 3.1 Pro) - 将故事拆分为具体的漫画分镜
+            STORY_PAGINATION: `你是一个漫画分页结构化 Agent。用户将提供一个故事文本（可能是多场景描述，也可能是自然语言叙事），并同时指定整页的页面比例（例如 1:1、4:5、16:9 等）。你的任务是将故事整理为分页结构，并输出严格合法的 JSON（UTF-8 编码）。只允许输出 JSON，不得包含额外文字、解释说明、Markdown 格式或尾随逗号。
+
+用户输入的是整体故事，而不是分镜。你需要根据叙事节奏自动判断分页数量。每一页必须作为一个完整的叙事单元，并且必须完全适配用户指定的页面比例。所有页面内部的板块（panel）必须能够合理排布在该固定比例画布内。
+
+顶层必须输出一个 JSON 对象，包含以下字段：
+
+"project"（字符串；根据故事内容推断一个简洁的项目标题）
+"master_page_ratio"（字符串；必须严格等于用户指定的页面比例）
+"global_layout_strategy"（字符串；说明整部作品在分页节奏、板块密度、视觉重心与翻页节奏上的整体策略，并说明如何在固定比例下保持排版统一）
+"pages"（数组；包含多个分页对象）
+
+对于每一页，必须包含以下字段：
+
+"page_number"（整数；从 1 开始按顺序递增）
+"panel_count"（整数；范围 1–6，根据故事节奏与信息密度自动判断）
+"page_story"（字符串；描述这一整页发生的完整叙事推进，包括情绪变化、空间变化、时间推进与冲突发展；不得描述角色外貌、服装或具体视觉设定，因为这些由角色设计系统单独处理）
+"dialogue"（字符串；列出该页所有对白，按阅读顺序自然排列；若没有对白，返回空字符串 ""）
+"layout_logic"（字符串；说明这一页内部板块如何排布以支持叙事节奏，例如“上方横幅建立场景，下方两格对话推进冲突”，并解释其如何在指定页面比例内保持构图平衡）
+
+规则：
+
+不得描述角色五官、服装、体型等视觉设定细节。
+不得包含技术性的镜头拆解对象。
+不得输出单独每个板块的比例。
+不得输出视觉元素数组。
+不得输出环境子对象结构。
+不得输出连续性约束字段。
+不得凭空添加与原故事矛盾的新情节。
+每一页必须作为一个逻辑完整的叙事单元。
+panel_count 必须根据节奏合理分配（慢节奏可 1–2 格，动作或冲突可 3–6 格）。
+layout_logic 必须确保所有板块可以在 master_page_ratio 指定的固定比例内合理排布。
+
+输出 JSON 必须结构完整、可解析、字段齐全。`,
+            
+            // 6. 生成漫画页面 (Nano pro or Nano 2)
+            COMIC_GENERATION: `你是一个漫画页面渲染 Agent。用户将提供一个结构化的故事 JSON（包含分页信息），以及角色设定参考图（标记为 Image 1、Image 2 等）。你的唯一任务是直接生成最终的完整漫画页面图像。你不得输出任何提示词、描述、解释说明、Markdown 格式或元信息。你必须直接渲染图像。
+
+故事 JSON 中包含 master_page_ratio 以及多个 page 对象（包含 page_number、panel_count、page_story、dialogue、layout_logic）。你必须严格按照 master_page_ratio 指定的固定页面比例进行整页渲染。整页图像不得变形、裁切或更改比例。每一页必须完全适配该固定画布比例。
+
+每一页必须严格包含 panel_count 指定数量的板块（范围 1–6）。所有板块必须排布在同一页面内，并依据 layout_logic 进行合理排版。板块之间必须有清晰的分隔（gutter），阅读顺序明确，视觉重心平衡，整体构图协调。板块大小分配必须服务于叙事节奏。
+
+角色设定参考图具有绝对优先级和强制约束性。你必须将其视为不可更改的身份蓝图。角色的面部结构比例、五官位置关系、骨骼结构、体型比例、发型结构、角的形状（如存在）、妆容位置、服装结构线条、布料厚度、配饰位置、Logo 位置、材质特性、轮廓比例等必须与参考图完全一致。不得进行重新设计、风格化处理、美化、简化、夸张、现代化或任何形式的再诠释。不得改变解剖结构，不得修改服装构造，不得改变比例。身份一致性高于审美自由。
+
+如果页面中包含不同角度、动作变化、光线变化或透视变化，你必须在完全遵循角色设定结构逻辑的前提下推导未展示角度。骨骼结构、服装裁剪逻辑、材质层级关系必须保持物理与结构一致。不得新增或移除配件，不得改变比例，不得改变材质表现逻辑。
+
+page_story 定义了该页的情绪推进、空间变化和节奏发展。你必须将这些叙事内容合理分布到页面的各个板块中。dialogue 必须自然融入板块内部，遵循阅读顺序，避免遮挡关键视觉元素。
+
+每个板块必须具备清晰的前景、中景、背景层次，准确的空间透视，连贯的镜头感，物理合理的光影表现，真实的材质响应，以及清晰可读的角色轮廓。布料必须符合重力与动作逻辑，金属材质必须反射一致，头发必须保持原始体积结构与分区方向。
+
+跨板块与跨页面连续性必须严格保持。角色的面部比例、妆容位置、角的结构、服装裁剪线、颜色平衡、配件尺度等不得发生漂移或渐变式变化。不得出现视觉身份偏移。
+
+保持电影级漫画插画质量，超高分辨率，锐利焦点，统一光影逻辑，专业级板块边框与间距设计，整体制作水准达到出版级标准。仅按 JSON 中页面顺序直接渲染完整漫画页面图像。`
+        };
+
+        const MODELS = {
+            CHAT: "gemini-3-flash-preview", // 专门用于对话，速度更快
+            TEXT: "gemini-3.1-pro-preview",
+            IMAGE_NANO_PRO: "gemini-3-pro-image-preview",
+            IMAGE_NANO_2: "gemini-3.1-flash-image-preview"
+        };
+    </script>
+
+    <!-- Character Edit Modal -->
+    <div id="charEditModal" class="fixed inset-0 bg-black/50 z-[100] hidden flex items-center justify-center">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 m-4 flex flex-col gap-4">
+            <h3 class="font-bold text-lg text-gray-900">修改角色设定</h3>
+            <div>
+                <label class="text-xs font-bold text-gray-500 mb-1 block">角色名称</label>
+                <input type="text" id="editCharName" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-purple-400">
+            </div>
+            <div>
+                <label class="text-xs font-bold text-gray-500 mb-1 block">性别</label>
+                <input type="text" id="editCharGender" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-purple-400">
+            </div>
+            <div>
+                <label class="text-xs font-bold text-gray-500 mb-1 block">外貌与生理特征</label>
+                <textarea id="editCharTraits" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm h-20 resize-none focus:outline-none focus:border-purple-400"></textarea>
+            </div>
+            <div>
+                <label class="text-xs font-bold text-gray-500 mb-1 block">视觉能量/气质</label>
+                <textarea id="editCharEnergy" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm h-16 resize-none focus:outline-none focus:border-purple-400"></textarea>
+            </div>
+            <div class="flex justify-end gap-2 mt-2">
+                <button onclick="closeCharEditModal()" class="px-4 py-2 text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors">取消</button>
+                <button onclick="saveCharEdit()" class="px-4 py-2 text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl transition-colors">保存修改</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =============== FRONTEND LOGIC & API INTERFACES =============== -->
+    <script>
+        lucide.createIcons();
+
+        const chatInput = document.getElementById('chatInput');
+        const chatHistory = document.getElementById('chatHistory');
+        const mainChatArea = document.getElementById('mainChatArea');
+        const rightSidebar = document.getElementById('rightSidebar');
+        const startWorkflowBtn = document.getElementById('startWorkflowBtn');
+        
+        let conversationContents = []; // 存储结构化的对话历史 [{role: "user", parts: [{text: "..."}]}, ...]
+        let currentStage = 'brainstorm'; // 'brainstorm' | 'story_revision' | 'character_confirmation'
+        let preCreatedCharacters = false; // 是否在聊天阶段已经提取了角色
+        let extractedStorySummary = null; // 提取的结构化故事大纲
+        let pendingCharacters = []; // 提取出但还未生成设计图的角色列表
+
+        // Get API Key
+        function getApiKey() {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            if (!key) {
+                alert("Please enter your Gemini API Key at the top first.");
+                return null;
+            }
+            return key;
+        }
+
+        // Initialize defaults
+        document.getElementById('imageModelSelect').value = 'gemini-3.1-flash-image-preview';
+
+        // Show/Hide Loading
+        function showLoading(text) {
+            document.getElementById('loadingText').innerText = text;
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+        }
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+        }
+
+        // Chat UI Logic
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 128) + 'px';
+        }
+
+        function handleEnter(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            const text = chatInput.value.trim();
+            if (!text) return;
+
+            if (text.includes("先做角色设计") || text.includes("先做角色设定") || text.includes("我要设计角色")) {
+                preCreatedCharacters = true;
+            }
+
+            appendUserMessage(text);
+            conversationContents.push({ role: "user", parts: [{ text: text }] });
+            
+            chatInput.value = '';
+            chatInput.style.height = 'auto';
+            
+            if (currentStage === 'brainstorm') {
+                const typingId = showTypingIndicator();
+                scrollToBottom();
+
+                // Call Agent 1: Chat Brainstorm
+                const aiResponse = await apiChatBrainstorm(conversationContents);
+                removeTypingIndicator(typingId);
+                
+                if (aiResponse) {
+                    appendAIMessage(aiResponse);
+                    conversationContents.push({ role: "model", parts: [{ text: aiResponse }] });
+                } else {
+                    // If error, remove the user message from history so they can retry
+                    conversationContents.pop();
+                    appendAIMessage("Oops, an error occurred while connecting to the agent. Check your API key.");
+                }
+            } else if (currentStage === 'story_revision') {
+                const typingId = showTypingIndicator();
+                scrollToBottom();
+                
+                const currentStory = document.getElementById('expandedStoryText').value;
+                const aiResponse = await apiStoryRevision(text, currentStory);
+                
+                removeTypingIndicator(typingId);
+                
+                if (aiResponse) {
+                    document.getElementById('expandedStoryText').value = aiResponse;
+                    
+                    // After story revision, auto-extract characters behind the scenes
+                    appendAIMessage("我已经根据您的意见修改了故事，右侧面板已更新！\n\n正在为您自动分析新的出场角色，请稍候...");
+                    conversationContents.push({ role: "model", parts: [{ text: "我已经修改了故事。" }] });
+                    
+                    const charTypingId = showTypingIndicator();
+                    scrollToBottom();
+                    
+                    const chars = await apiCharacterExtraction(aiResponse);
+                    removeTypingIndicator(charTypingId);
+                    
+                    if (chars && Array.isArray(chars)) {
+                        pendingCharacters = chars;
+                        currentStage = 'character_confirmation';
+                        appendAIMessage(`分析完毕！我从新的故事中提取出了 **${chars.length}** 个主要角色。\n\n请在右侧面板查看角色列表。如果没有问题，请点击右侧面板的「生成角色设计图」。如果需要调整，您可以在这里告诉我。`);
+                        renderPendingCharacters(chars);
+                    } else {
+                        appendAIMessage("提取角色失败，请检查 API Key 或重试。");
+                    }
+                } else {
+                    conversationContents.pop();
+                    appendAIMessage("修改故事失败，请检查 API Key 或重试。");
+                }
+            } else if (currentStage === 'character_confirmation') {
+                // If user wants to modify characters
+                const typingId = showTypingIndicator();
+                scrollToBottom();
+                
+                // Let's use a quick revision trick: ask the extraction agent to update the JSON based on user text
+                const currentCharsContext = JSON.stringify(pendingCharacters);
+                const prompt = `当前提取的角色列表：\n${currentCharsContext}\n\n用户的修改意见：\n${text}\n\n请根据修改意见，更新角色列表，并重新返回合法的完整 JSON。`;
+                
+                const revisedChars = await apiCharacterExtraction(prompt);
+                removeTypingIndicator(typingId);
+                
+                if (revisedChars && Array.isArray(revisedChars)) {
+                    pendingCharacters = revisedChars;
+                    appendAIMessage("我已经根据您的意见更新了角色设定！您可以在右侧面板查看新的角色列表。如果没有问题，请点击右侧面板的「生成角色设计图」。");
+                    renderPendingCharacters(revisedChars);
+                } else {
+                    appendAIMessage("更新角色失败，请重试或换个说法。");
+                }
+            } else {
+                const typingId = showTypingIndicator();
+                scrollToBottom();
+                setTimeout(() => {
+                    removeTypingIndicator(typingId);
+                    appendAIMessage("目前故事结构已经确认啦，您可以直接在右侧面板进行接下来的操作哦！");
+                }, 800);
+            }
+        }
+
+        function appendUserMessage(text) {
+            const html = `
+                <div class="flex gap-4 justify-end">
+                    <div class="flex flex-col gap-1 max-w-[85%] items-end">
+                        <span class="text-xs font-bold text-gray-400 mr-1">You</span>
+                        <div class="chat-bubble chat-user p-4 text-[15px] shadow-sm">
+                            ${text.replace(/\n/g, '<br>')}
+                        </div>
+                    </div>
+                </div>
+            `;
+            chatHistory.insertAdjacentHTML('beforeend', html);
+            scrollToBottom();
+        }
+
+        function appendAIMessage(text) {
+            // Parse for interactive options JSON
+            let renderedText = text;
+            let optionsHtml = '';
+
+            try {
+                // Remove the raw JSON block completely from the rendered text if it exists
+                const fullJsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/);
+                if (fullJsonMatch) {
+                    renderedText = text.replace(fullJsonMatch[0], '').trim();
+                    const data = JSON.parse(fullJsonMatch[1]);
+                    
+                    if (data.options && Array.isArray(data.options)) {
+                        if (data.question && !renderedText.includes(data.question)) {
+                            renderedText += (renderedText ? '\n\n' : '') + `**${data.question}**`;
+                        }
+                        if (data.recommendation) {
+                            renderedText += `\n*${data.recommendation}*`;
+                        }
+
+                        optionsHtml = `<div class="flex flex-col gap-2 mt-4">`;
+                        data.options.forEach(opt => {
+                            const safeLabel = opt.label.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                            optionsHtml += `
+                                <button onclick="selectChatOption('${safeLabel}', '${opt.id}')" class="text-left px-4 py-2.5 bg-white border border-purple-200 hover:border-purple-400 hover:bg-purple-50 text-purple-700 text-[13px] font-semibold rounded-xl transition-all shadow-sm">
+                                    ${opt.label}
+                                </button>
+                            `;
+                        });
+                        optionsHtml += `</div>`;
+                        optionsHtml += `<div class="text-[11px] text-gray-400 mt-3 italic flex items-center gap-1.5 opacity-80"><i data-lucide="pencil" class="w-3 h-3"></i> 你也可以直接在输入框中用自然语言告诉我你的想法</div>`;
+                    }
+                    if (data.summary) {
+                        extractedStorySummary = data.summary;
+                        if (typeof data.summary.pre_create_characters === 'boolean') {
+                            preCreatedCharacters = data.summary.pre_create_characters;
+                        }
+                        // Update UI if summary contains pages
+                        if (data.summary.pages) {
+                            // document.getElementById('pageCountSelect').value = data.summary.pages; // We removed the select
+                        }
+                        // Update UI if summary contains style
+                        if (data.summary.style) {
+                            const styleMap = {
+                                "style_manga": "Japanese manga style",
+                                "style_cinematic": "Cinematic realistic style",
+                                "style_painterly": "Western superhero comic style"
+                            };
+                            if (styleMap[data.summary.style]) {
+                                document.getElementById('artStyleSelect').value = styleMap[data.summary.style];
+                            }
+                        }
+                    }
+                } else {
+                    const rawJsonMatch = text.match(/\{[\s\S]*"options"[\s\S]*\}/);
+                    if (rawJsonMatch && !text.includes('```json')) {
+                        renderedText = text.replace(rawJsonMatch[0], '').trim();
+                        const data = JSON.parse(rawJsonMatch[0]);
+                        
+                        if (data.options && Array.isArray(data.options)) {
+                            if (data.question && !renderedText.includes(data.question)) {
+                                renderedText += (renderedText ? '\n\n' : '') + `**${data.question}**`;
+                            }
+                            if (data.recommendation) {
+                                renderedText += `\n*${data.recommendation}*`;
+                            }
+
+                            optionsHtml = `<div class="flex flex-col gap-2 mt-4">`;
+                            data.options.forEach(opt => {
+                                const safeLabel = opt.label.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                                optionsHtml += `
+                                    <button onclick="selectChatOption('${safeLabel}', '${opt.id}')" class="text-left px-4 py-2.5 bg-white border border-purple-200 hover:border-purple-400 hover:bg-purple-50 text-purple-700 text-[13px] font-semibold rounded-xl transition-all shadow-sm">
+                                        ${opt.label}
+                                    </button>
+                                `;
+                            });
+                            optionsHtml += `</div>`;
+                            optionsHtml += `<div class="text-[11px] text-gray-400 mt-3 italic flex items-center gap-1.5 opacity-80"><i data-lucide="pencil" class="w-3 h-3"></i> 你也可以直接在输入框中用自然语言告诉我你的想法</div>`;
+                        }
+                        if (data.summary) {
+                            extractedStorySummary = data.summary;
+                            if (typeof data.summary.pre_create_characters === 'boolean') {
+                                preCreatedCharacters = data.summary.pre_create_characters;
+                            }
+                            // Update UI if summary contains pages
+                            if (data.summary.pages) {
+                                // document.getElementById('pageCountSelect').value = data.summary.pages; // We removed the select
+                            }
+                            // Update UI if summary contains style
+                            if (data.summary.style) {
+                                const styleMap = {
+                                    "style_manga": "Japanese manga style",
+                                    "style_cinematic": "Cinematic realistic style",
+                                    "style_painterly": "Western superhero comic style"
+                                };
+                                if (styleMap[data.summary.style]) {
+                                    document.getElementById('artStyleSelect').value = styleMap[data.summary.style];
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("No valid JSON options parsed or parse error:", e);
+            }
+
+            // Remove the json block completely so it doesn't show up in text
+            const rawJsonMatch2 = renderedText.match(/```json\n?([\s\S]*?)\n?```/);
+            if (rawJsonMatch2) {
+                renderedText = renderedText.replace(rawJsonMatch2[0], '').trim();
+            }
+            
+            // Also try to remove json that doesn't have a new line
+            const rawJsonMatch3 = renderedText.match(/```json([\s\S]*?)```/);
+            if (rawJsonMatch3) {
+                 renderedText = renderedText.replace(rawJsonMatch3[0], '').trim();
+            }
+
+            // Remove empty backticks block
+            const emptyMatch = renderedText.match(/```\n?```/);
+            if(emptyMatch) {
+                renderedText = renderedText.replace(emptyMatch[0], '').trim();
+            }
+            
+            // final pass just in case
+            renderedText = renderedText.replace(/```json/g, '').replace(/```/g, '').trim();
+
+            renderedText = renderedText.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+            const html = `
+                <div class="flex gap-4">
+                    <div class="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
+                        <i data-lucide="bot" class="w-5 h-5 text-purple-600"></i>
+                    </div>
+                    <div class="flex flex-col gap-1 max-w-[85%]">
+                        <span class="text-xs font-bold text-gray-400 ml-1">Comic Agent</span>
+                        <div class="chat-bubble chat-ai p-4 text-[15px] shadow-sm">
+                            ${renderedText}
+                            ${optionsHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+            chatHistory.insertAdjacentHTML('beforeend', html);
+            lucide.createIcons();
+            scrollToBottom();
+        }
+
+        function selectChatOption(label, id) {
+            if (label.includes("先做角色设计") || label.includes("char_yes")) {
+                preCreatedCharacters = true;
+            }
+            if (id === 'confirm_plan') {
+                appendUserMessage(label);
+                startStoryWorkflow();
+                return;
+            }
+            if (id === 'start_pagination') {
+                appendUserMessage(label);
+                startPaginationProcess();
+                return;
+            }
+            if (id === 'confirm_storyboard_with_cover') {
+                appendUserMessage(label);
+                triggerFinalGeneration(true);
+                return;
+            }
+            if (id === 'confirm_storyboard_no_cover') {
+                appendUserMessage(label);
+                triggerFinalGeneration(false);
+                return;
+            }
+            chatInput.value = label;
+            sendMessage();
+        }
+
+        function showTypingIndicator() {
+            const id = 'typing-' + Date.now();
+            const html = `
+                <div id="${id}" class="flex gap-4">
+                    <div class="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
+                        <i data-lucide="bot" class="w-5 h-5 text-purple-600"></i>
+                    </div>
+                    <div class="flex items-center gap-1.5 chat-bubble chat-ai p-4 h-[54px]">
+                        <div class="w-2 h-2 rounded-full typing-dot"></div>
+                        <div class="w-2 h-2 rounded-full typing-dot"></div>
+                        <div class="w-2 h-2 rounded-full typing-dot"></div>
+                    </div>
+                </div>
+            `;
+            chatHistory.insertAdjacentHTML('beforeend', html);
+            return id;
+        }
+
+        function removeTypingIndicator(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        function scrollToBottom() {
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        function revealSidebar() {
+            mainChatArea.classList.remove('max-w-3xl');
+            mainChatArea.classList.add('w-2/3');
+            
+            rightSidebar.classList.remove('hidden');
+            // Small timeout to allow display:block to apply before animating opacity
+            setTimeout(() => {
+                rightSidebar.classList.remove('opacity-0', 'translate-x-4');
+                rightSidebar.classList.add('flex', 'opacity-100', 'translate-x-0');
+            }, 50);
+        }
+
+        // ==========================================
+        // AGENT API INTERFACES
+        // ==========================================
+
+        async function testApiKey() {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            if (!key) return;
+
+            const statusCheck = document.getElementById('apiKeyStatusCheck');
+            const statusError = document.getElementById('apiKeyStatusError');
+            const loadingIcon = document.getElementById('apiKeyLoading');
+            
+            // Reset state
+            statusCheck.classList.add('hidden');
+            statusError.classList.add('hidden');
+            loadingIcon.classList.remove('hidden');
+
+            try {
+                // Simplest call from docs to test connectivity
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${key}`;
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { 
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: "Explain how AI works in a few words" }] }]
+                    })
+                });
+                
+                if (response.ok) {
+                    statusCheck.classList.remove('hidden');
+                } else {
+                    statusError.classList.remove('hidden');
+                }
+            } catch (error) {
+                statusError.classList.remove('hidden');
+            } finally {
+                loadingIcon.classList.add('hidden');
+            }
+        }
+
+        async function makeGeminiRequest(model, systemPrompt, userTextOrContents, forceJSON = false) {
+            const apiKey = getApiKey();
+            if (!apiKey) return null;
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            
+            let contents = [];
+            if (typeof userTextOrContents === 'string') {
+                contents = [{ role: "user", parts: [{ text: userTextOrContents }] }];
+            } else {
+                contents = userTextOrContents;
+            }
+
+            const body = {
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents: contents,
+            };
+
+            if (forceJSON) {
+                body.generationConfig = { responseMimeType: "application/json" };
+            }
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { 
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(body)
+                });
+                const data = await response.json();
+                if (data.candidates && data.candidates[0].content.parts) {
+                    return data.candidates[0].content.parts[0].text;
+                }
+                console.error("API Error:", data);
+                return null;
+            } catch (err) {
+                console.error("Fetch Error:", err);
+                return null;
+            }
+        }
+
+        // 1. Chat Brainstorm
+        async function apiChatBrainstorm(contents) {
+            return await makeGeminiRequest(MODELS.CHAT, SYSTEM_PROMPTS.CHAT_BRAINSTORM, contents);
+        }
+
+        // 2. Story Expansion
+        async function apiStoryExpansion() {
+            let prompt = "";
+            if (extractedStorySummary) {
+                prompt = `请根据以下设定的核心参数，产出一篇完整的故事正文：
+
+核心故事创意及讨论细节：${extractedStorySummary.core_idea}
+目标受众：${extractedStorySummary.target_audience}
+
+注意：
+1. 请只专注于内容创作、角色互动与故事起承转合。
+2. 不要提取或考虑任何关于“需要生成多少页漫画”的信息，也不要在故事中涉及画风描述，把这些完全留给后续环节。
+3. 如果故事设定中已有角色信息，请基于这些信息展开。`;
+            } else {
+                // Convert conversation contents to a readable string for the expansion prompt as fallback
+                const historyText = conversationContents.map(msg => 
+                    `${msg.role === 'user' ? 'User' : 'AI'}: ${msg.parts[0].text}`
+                ).join("\n\n");
+                
+                prompt = `请根据以下我们的对话记录（请只关注用户一开始的输入、故事的核心想法、主题、设定的目标受众等，**不要提取或考虑任何关于需要生成多少页漫画的讨论**，页数信息将留给后续的环节），产出一篇完整的故事正文：\n\n${historyText}`;
+            }
+            
+            return await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.STORY_EXPANSION, prompt);
+        }
+
+        // 修改故事 (Story Revision)
+        async function apiStoryRevision(userRequest, currentStory) {
+            const prompt = `当前故事：\n${currentStory}\n\n用户的修改意见：\n${userRequest}\n\n请根据修改意见重写整个故事。`;
+            return await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.STORY_REVISION, prompt);
+        }
+
+        // 3. Character Extraction
+        async function apiCharacterExtraction(expandedStoryText) {
+            const jsonText = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.CHARACTER_EXTRACTION, `Story:\n${expandedStoryText}`, true);
+            if (!jsonText) return null;
+            
+            try {
+                // Clean up any markdown formatting if leaked
+                const cleanJson = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                const parsed = JSON.parse(cleanJson);
+                // System prompt requires returning { project: "...", characters: [...] }
+                return parsed.characters || parsed;
+            } catch (e) {
+                console.error("Failed to parse characters:", e, jsonText);
+                return null;
+            }
+        }
+
+        // 4. Character Design (Image Gen)
+        async function apiCharacterDesign(characterObj) {
+            const apiKey = getApiKey();
+            if (!apiKey) return null;
+            
+            // Note: Official docs use gemini-3.1-flash-image-preview for text-to-image without tricky configuration
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key=${apiKey}`;
+            
+            // Clean simple prompt following docs: "Create a picture of..."
+            const prompt = `A professional character turnaround sheet on a clean light gray studio background. 
+Character Name: ${characterObj.name}
+Role: ${characterObj.role}
+Gender: ${characterObj.gender || 'Unknown'}
+Species: ${characterObj.species}
+Age Stage: ${characterObj.apparent_age_stage}
+Physical Traits: ${(characterObj.distinct_physical_traits || []).join(', ')}
+Core Traits: ${(characterObj.core_traits || []).join(', ')}
+Visual Energy: ${characterObj.visual_energy_profile}`;
+
+            const body = {
+                contents: [{
+                    parts: [{ text: prompt }]
+                }],
+                generationConfig: {
+                    responseModalities: ["IMAGE"]
+                }
+            };
+
+            console.log("Sending Image Request Body:", JSON.stringify(body, null, 2));
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                });
+                const data = await response.json();
+                
+                console.log("Image Response:", data);
+                
+                if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+                    for (const part of data.candidates[0].content.parts) {
+                        if (part.inlineData) {
+                            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                        }
+                    }
+                }
+                return null;
+            } catch (err) {
+                console.error("Image Generation API Error:", err);
+                return null;
+            }
+        }
+
+        // 5. Story Pagination
+        async function apiStoryPagination(expandedStoryText, numPages, style) {
+            const apiKey = getApiKey();
+            if (!apiKey) return null;
+            
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.TEXT}:generateContent?key=${apiKey}`;
+            
+            const prompt = `${SYSTEM_PROMPTS.STORY_PAGINATION}\n\n请将以下故事进行分页：\n目标页数：${numPages} 页\n漫画画风：${style}\n固定页面比例：1:1\n\n故事正文：\n${expandedStoryText}`;
+
+            const body = {
+                contents: [{
+                    parts: [{ text: prompt }]
+                }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseJsonSchema: {
+                        type: "object",
+                        properties: {
+                            project: { type: "string" },
+                            master_page_ratio: { type: "string" },
+                            global_layout_strategy: { type: "string" },
+                            pages: {
+                                type: "array",
+                                items: {
+                                    type: "object",
+                                    properties: {
+                                        page_number: { type: "integer" },
+                                        panel_count: { type: "integer" },
+                                        page_story: { type: "string" },
+                                        dialogue: { type: "string" },
+                                        layout_logic: { type: "string" }
+                                    },
+                                    required: ["page_number", "panel_count", "page_story", "dialogue", "layout_logic"]
+                                }
+                            }
+                        },
+                        required: ["project", "master_page_ratio", "global_layout_strategy", "pages"]
+                    }
+                }
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                });
+                const data = await response.json();
+                
+                if (data.candidates && data.candidates[0].content.parts) {
+                    const text = data.candidates[0].content.parts[0].text;
+                    const cleanStr = text.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
+                    return JSON.parse(cleanStr);
+                }
+                console.error("Pagination API Error:", data);
+                return null;
+            } catch (err) {
+                console.error("Pagination Fetch Error:", err);
+                return null;
+            }
+        }
+
+        // 6. Comic Generation
+        async function apiComicGeneration(page, ratio, style, imageModelName, previousPanelData) {
+            const apiKey = getApiKey();
+            if (!apiKey) return null;
+            
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${imageModelName}:generateContent?key=${apiKey}`;
+
+            let charContextText = "";
+            let inlineDataParts = [];
+            let imgCount = 1;
+            
+            for (let char of pendingCharacters) {
+                if (char.avatarUrl && char.avatarUrl.startsWith('data:')) {
+                    charContextText += `Character Name: ${char.name} (See Image ${imgCount} for exact appearance)\n`;
+                    const [mimeInfo, base64Data] = char.avatarUrl.split(',');
+                    const mimeType = mimeInfo.match(/:(.*?);/)[1];
+                    inlineDataParts.push({
+                        inlineData: { mimeType: mimeType, data: base64Data }
+                    });
+                    imgCount++;
+                } else {
+                    charContextText += `Character Name: ${char.name} (Appearance description: ${char.species}, ${char.apparent_age_stage}, ${(char.distinct_physical_traits || []).join(', ')})\n`;
+                }
+            }
+
+            const scenePrompt = `${SYSTEM_PROMPTS.COMIC_RENDER}\n\n[CHARACTER REFERENCES]
+${charContextText}
+
+[ART STYLE OVERRIDE]
+You MUST render this page strictly in the following art style: ${style}. 
+Maintain this exact visual aesthetic, color grading, inking style, and mood.
+IMPORTANT: You MUST natively draw speech bubbles and render the dialogue text directly inside the image. Integrate the text cleanly into the composition using appropriate typography for the chosen art style.
+NO WATERMARKS, NO SIGNATURES, NO LOGOS.
+
+[PAGE INSTRUCTIONS]
+You are drawing Page ${page.page_number}.
+Action & Environment: ${page.page_story}
+Dialogue to render in speech bubbles: "${page.dialogue || "No dialogue"}"
+Panel Count Layout: ${page.panel_count} panels.
+Layout Logic: ${page.layout_logic || ""}
+
+[CRITICAL DIRECTIVE]
+Do NOT invent new character designs. For any character mentioned in the scene that matches a Character Name in the references above, you MUST use their corresponding Reference Image as an absolute blueprint. The final render must look exactly like the reference image characters placed into the new environment.`;
+
+            let requestParts = [{ text: scenePrompt }];
+            
+            if (previousPanelData) {
+                requestParts.push({ text: "Use the following image as a STRICT STYLE AND ATMOSPHERE REFERENCE for continuity. Do NOT copy the action or composition of this image, ONLY its art style, linework, and color grading:" });
+                requestParts.push({
+                    inlineData: {
+                        mimeType: previousPanelData.mimeType,
+                        data: previousPanelData.data
+                    }
+                });
+            }
+            
+            requestParts = requestParts.concat(inlineDataParts);
+            
+            const body = {
+                contents: [{ parts: requestParts }],
+                generationConfig: {
+                    responseModalities: ["IMAGE"]
+                }
+            };
+
+            // Optional aspect ratio for models that support it
+            if (ratio) {
+                 body.generationConfig.imageConfig = { aspectRatio: ratio };
+            }
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                });
+                const data = await response.json();
+                
+                let base64Image = null;
+                if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+                    for (const part of data.candidates[0].content.parts) {
+                        if (part.inlineData) {
+                            base64Image = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                            return { base64Image, rawData: part.inlineData };
+                        }
+                    }
+                }
+                console.error("No image returned:", data);
+                return null;
+            } catch (err) {
+                console.error("API Error during comic generation:", err);
+                return null;
+            }
+        }
+
+        // ==========================================
+        // WORKFLOW ORCHESTRATION
+        // ==========================================
+
+        async function startStoryWorkflow() {
+            if (!getApiKey()) return;
+            
+            startWorkflowBtn.classList.add('hidden');
+            startWorkflowBtn.classList.remove('flex');
+            
+            revealSidebar();
+            
+            if (preCreatedCharacters) {
+                currentStage = 'story_revision';
+                // Phase 1: Extract characters from chat history first
+                appendAIMessage("收到！因为我们在对话中已经讨论了角色设定，我正在请教 **角色提取专家** 从对话中梳理角色信息...");
+                const typingIdChar = showTypingIndicator();
+                scrollToBottom();
+                
+                let sourceText = "";
+                if (extractedStorySummary && extractedStorySummary.core_idea) {
+                    sourceText = "这是我们确认的核心故事与角色设定信息，请从中提取角色：\n" + extractedStorySummary.core_idea;
+                } else {
+                    const historyText = conversationContents.map(msg => 
+                        `${msg.role === 'user' ? 'User' : 'AI'}: ${msg.parts[0].text}`
+                    ).join("\n\n");
+                    sourceText = "这是我们的对话记录，请从中提取我们确认好的角色信息：\n" + historyText;
+                }
+                
+                const chars = await apiCharacterExtraction(sourceText);
+                removeTypingIndicator(typingIdChar);
+                
+                if (chars && chars.length > 0) {
+                    await renderExtractedCharacters(chars);
+                } else {
+                    appendAIMessage("未能从对话中提取到角色，我们将直接进入故事扩写。");
+                }
+
+                // Phase 2: Expand story
+                appendAIMessage("角色已梳理完毕！接下来我正在请教 **剧本扩写专家**，结合我们的角色设定为您生成完整故事...");
+                const typingIdStory = showTypingIndicator();
+                scrollToBottom();
+                
+                const expanded = await apiStoryExpansion();
+                removeTypingIndicator(typingIdStory);
+                
+                if (expanded) {
+                    document.getElementById('expandedStoryText').value = expanded;
+                    appendAIMessage("这是剧本专家为您生成的故事大纲，已同步至右侧面板：\n\n" + expanded + "\n\n**如果您有任何需要修改的地方，可以直接在这里告诉我**。\n\n由于角色已经提前提取好了，您可以直接在右侧确认角色列表，点击「生成角色设计图」为他们绘制设定图！");
+                } else {
+                    appendAIMessage("生成故事失败，请检查 API Key 或重试。");
+                }
+            } else {
+                currentStage = 'story_revision';
+                // Traditional flow: Story -> Auto Extract Character -> Revision
+                appendAIMessage("好的，我正在为您整理之前的讨论，并请教 **剧本扩写专家**，马上为您生成完整故事...");
+                const typingId = showTypingIndicator();
+                scrollToBottom();
+                
+                const expanded = await apiStoryExpansion();
+                
+                removeTypingIndicator(typingId);
+                if (expanded) {
+                    document.getElementById('expandedStoryText').value = expanded;
+                    appendAIMessage("这是剧本专家为您生成的故事大纲，已同步至右侧面板：\n\n" + expanded + "\n\n正在为您自动分析出场角色，请稍候...");
+                    
+                    const charTypingId = showTypingIndicator();
+                    scrollToBottom();
+                    
+                    const chars = await apiCharacterExtraction(expanded);
+                    removeTypingIndicator(charTypingId);
+                    
+                    if (chars && Array.isArray(chars)) {
+                        pendingCharacters = chars;
+                        currentStage = 'character_confirmation';
+                        appendAIMessage(`分析完毕！我从故事中提取出了 **${chars.length}** 个主要角色。\n\n您可以**继续在这里提出对故事或角色的修改意见**，或者在右侧面板直接点击「生成角色设计图」。`);
+                        renderPendingCharacters(chars);
+                    } else {
+                        appendAIMessage("提取角色失败，请检查 API Key 或重试。");
+                    }
+                } else {
+                    appendAIMessage("生成故事失败，请检查 API Key 或重试。");
+                }
+            }
+        }
+
+        async function triggerStoryExpansion() {
+            // This is kept for the "Regenerate" button in the right sidebar
+            showLoading("正在请教剧本扩写专家...");
+            const expanded = await apiStoryExpansion();
+            if (expanded) {
+                document.getElementById('expandedStoryText').value = expanded;
+            }
+            hideLoading();
+        }
+
+        async function triggerCharacterExtraction() {
+            const storyText = document.getElementById('expandedStoryText').value;
+            if (!storyText) return alert("Please expand the story first.");
+
+            currentStage = 'character_extraction';
+
+            appendAIMessage("故事已确认！正在请教 **角色提取专家** 分析出场人物...");
+            const typingId = showTypingIndicator();
+            scrollToBottom();
+
+            const chars = await apiCharacterExtraction(storyText);
+            removeTypingIndicator(typingId);
+            
+            if (chars && Array.isArray(chars)) {
+                await renderExtractedCharacters(chars);
+                appendAIMessage("角色设定已全部完成！现在您可以在右下角调整分页和画风，然后点击「Paginate & Generate Comic」生成最终的漫画啦！");
+            } else {
+                appendAIMessage("提取角色失败，请重试。");
+            }
+        }
+
+        async function triggerCharacterGeneration() {
+            if (pendingCharacters.length === 0) return;
+            
+            const btn = document.getElementById('generateCharactersBtn');
+            btn.classList.add('hidden');
+            
+            appendAIMessage(`收到！正在请教 **角色设计专家** 为这 ${pendingCharacters.length} 位角色绘制设定图，请留意右侧面板的更新...`);
+            
+            // Loop through each loaded character item and replace with generation logic
+            const list = document.getElementById('characterList');
+            const items = list.querySelectorAll('.char-item-pending');
+            
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                const char = pendingCharacters[i];
+                
+                // Show pulse loading on the specific item
+                item.classList.add('animate-pulse');
+                item.querySelector('.avatar-container').innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 text-gray-400 animate-spin"></i>';
+                lucide.createIcons();
+                
+                // Actual API Call to Gemini 3 Pro Image Preview
+                const avatarUrl = await apiCharacterDesign(char);
+                
+                // Remove pulse and set image
+                item.classList.remove('animate-pulse');
+                if (avatarUrl) {
+                    item.querySelector('.avatar-container').innerHTML = `<img src="${avatarUrl}" class="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity" onclick="window.open('${avatarUrl}', '_blank')">`;
+                    // Store the generated image back into the character object for later workflow
+                    char.avatarUrl = avatarUrl;
+                } else {
+                    item.querySelector('.avatar-container').innerHTML = `
+                        <i data-lucide="image-off" class="w-4 h-4 text-red-400"></i>
+                        <button onclick="regenerateSingleCharacter(${i})" class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+                    `;
+                    char.avatarUrl = null;
+                }
+                lucide.createIcons();
+            }
+            
+            // Update the UI to show edit controls and potentially a regenerate button
+            list.innerHTML = ''; // Re-render to show edit state
+            
+            for (let i = 0; i < pendingCharacters.length; i++) {
+                const char = pendingCharacters[i];
+                const shortDesc = (char.role || "角色") + " | " + (char.gender || "未知性别") + " | " + (char.species || "未知物种");
+                
+                    const avatarContent = char.avatarUrl 
+                        ? `<img src="${char.avatarUrl}" class="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity" onclick="appendAIMessage('<img src=\\'${char.avatarUrl}\\' class=\\'max-w-full rounded-xl shadow-sm\\'>')">`
+                        : `<i data-lucide="image-off" class="w-4 h-4 text-red-400"></i>`;
+                
+                const html = `
+                    <div class="char-item-done flex items-center gap-3 bg-white p-2.5 rounded-xl border border-gray-100 w-full shadow-sm">
+                        <div class="avatar-container w-12 h-12 rounded-full bg-gray-50 border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center relative group">
+                            ${avatarContent}
+                            ${!char.avatarUrl ? `<button onclick="regenerateSingleCharacter(${i})" class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>` : ''}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-bold text-gray-900 truncate flex items-center gap-2">
+                                <span>${char.name}</span>
+                                <button onclick="openCharEditModal(${i})" class="text-gray-300 hover:text-purple-600 transition-colors"><i data-lucide="edit-3" class="w-3 h-3"></i></button>
+                            </div>
+                            <div class="text-[11px] text-gray-500 truncate" title="${char.narrative_function || shortDesc}">${shortDesc}</div>
+                        </div>
+                    </div>
+                `;
+                list.insertAdjacentHTML('beforeend', html);
+            }
+            lucide.createIcons();
+            
+            // Check if any character generation failed
+            const failedCount = pendingCharacters.filter(c => !c.avatarUrl).length;
+            if (failedCount > 0) {
+                appendAIMessage(`部分角色设计图生成失败（${failedCount} 个），可能被安全策略拦截，或网络问题。请点击右侧面板对应角色的头像重试，或直接进入下一步。`);
+            } else {
+                let displayHtml = `<div class="grid grid-cols-2 gap-2 mt-2">`;
+                pendingCharacters.forEach(char => {
+                    displayHtml += `
+                    <div class="flex flex-col items-center gap-1 bg-white p-2 rounded-xl border border-gray-100">
+                        <div class="w-16 h-16 rounded-full overflow-hidden border border-gray-200">
+                            <img src="${char.avatarUrl}" class="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity" onclick="appendAIMessage('<img src=\\'${char.avatarUrl}\\' class=\\'max-w-full rounded-xl shadow-sm\\'>')">
+                        </div>
+                        <span class="text-xs font-bold text-gray-800">${char.name}</span>
+                    </div>
+                    `;
+                });
+                displayHtml += `</div>`;
+                
+                const actionsHtml = `
+                    <div class="flex flex-col gap-2 mt-4">
+                        <button onclick="startPaginationProcess()" class="text-left px-4 py-2.5 bg-white border border-purple-200 hover:border-purple-400 hover:bg-purple-50 text-purple-700 text-[13px] font-semibold rounded-xl transition-all shadow-sm">
+                            确认无误，开始整理分镜剧本！
+                        </button>
+                    </div>
+                `;
+
+                appendAIMessage(`太棒了！所有角色设定图都已补充绘制完成！请确认效果：\n${displayHtml}\n\n如果对角色形象满意，我们是否现在进入分镜剧本整理阶段？\n${actionsHtml}`);
+            }
+            currentStage = 'pagination_confirmation';
+        }
+
+        async function regenerateSingleCharacter(index) {
+            const char = pendingCharacters[index];
+            if (!char) return;
+            
+            const list = document.getElementById('characterList');
+            const item = list.children[index];
+            
+            item.classList.add('animate-pulse');
+            item.querySelector('.avatar-container').innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 text-gray-400 animate-spin"></i>';
+            lucide.createIcons();
+            
+            const avatarUrl = await apiCharacterDesign(char);
+            
+            item.classList.remove('animate-pulse');
+            if (avatarUrl) {
+                item.querySelector('.avatar-container').innerHTML = `<img src="${avatarUrl}" class="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity" onclick="appendAIMessage('<img src=\\'${avatarUrl}\\' class=\\'max-w-full rounded-xl shadow-sm\\'>')">`;
+                char.avatarUrl = avatarUrl;
+            } else {
+                item.querySelector('.avatar-container').innerHTML = `
+                    <i data-lucide="image-off" class="w-4 h-4 text-red-400"></i>
+                    <button onclick="regenerateSingleCharacter(${index})" class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+                `;
+            }
+            lucide.createIcons();
+            
+            // Check if all are finally done
+            if (pendingCharacters.every(c => c.avatarUrl)) {
+                let displayHtml = `<div class="grid grid-cols-2 gap-2 mt-2">`;
+                pendingCharacters.forEach(char => {
+                    displayHtml += `
+                    <div class="flex flex-col items-center gap-1 bg-white p-2 rounded-xl border border-gray-100">
+                        <div class="w-16 h-16 rounded-full overflow-hidden border border-gray-200">
+                            <img src="${char.avatarUrl}" class="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity" onclick="appendAIMessage('<img src=\\'${char.avatarUrl}\\' class=\\'max-w-full rounded-xl shadow-sm\\'>')">
+                        </div>
+                        <span class="text-xs font-bold text-gray-800">${char.name}</span>
+                    </div>
+                    `;
+                });
+                displayHtml += `</div>`;
+                
+                const actionsHtml = `
+                    <div class="flex flex-col gap-2 mt-4">
+                        <button onclick="startPaginationProcess()" class="text-left px-4 py-2.5 bg-white border border-purple-200 hover:border-purple-400 hover:bg-purple-50 text-purple-700 text-[13px] font-semibold rounded-xl transition-all shadow-sm">
+                            确认无误，开始整理分镜剧本！
+                        </button>
+                    </div>
+                `;
+
+                appendAIMessage(`太棒了！所有角色设定图都已补充绘制完成！请确认效果：\n${displayHtml}\n\n如果对角色形象满意，我们是否现在进入分镜剧本整理阶段？\n${actionsHtml}`);
+                currentStage = 'pagination_confirmation';
+            }
+        }
+
+        let editingCharIndex = -1;
+
+        function openCharEditModal(index) {
+            const char = pendingCharacters[index];
+            if (!char) return;
+            editingCharIndex = index;
+            
+            document.getElementById('editCharName').value = char.name || '';
+            document.getElementById('editCharGender').value = char.gender || '';
+            document.getElementById('editCharTraits').value = Array.isArray(char.distinct_physical_traits) ? char.distinct_physical_traits.join(', ') : (char.distinct_physical_traits || '');
+            document.getElementById('editCharEnergy').value = char.visual_energy_profile || '';
+            
+            document.getElementById('charEditModal').classList.remove('hidden');
+        }
+
+        function closeCharEditModal() {
+            document.getElementById('charEditModal').classList.add('hidden');
+            editingCharIndex = -1;
+        }
+
+        function saveCharEdit() {
+            if (editingCharIndex < 0) return;
+            const char = pendingCharacters[editingCharIndex];
+            if (!char) return;
+            
+            char.name = document.getElementById('editCharName').value.trim();
+            char.gender = document.getElementById('editCharGender').value.trim();
+            const traitsStr = document.getElementById('editCharTraits').value.trim();
+            char.distinct_physical_traits = traitsStr.split(',').map(s => s.trim()).filter(s => s);
+            char.visual_energy_profile = document.getElementById('editCharEnergy').value.trim();
+            
+            closeCharEditModal();
+            
+            // Re-render character list based on the current stage
+            if (char.avatarUrl || document.querySelector('.char-item-done')) {
+                // It was already generated or in "done" state, re-render the list items in done state
+                // But we don't have a single render function for done state. Let's just update the specific item's DOM.
+                const list = document.getElementById('characterList');
+                const item = list.children[editingCharIndex];
+                if (item) {
+                    item.querySelector('.text-sm.font-bold span').innerText = char.name;
+                    // Note: changing traits after generation doesn't update the image unless regenerated.
+                    // We just update the DOM title if possible
+                    const shortDesc = (char.role || "角色") + " | " + (char.gender || "未知性别") + " | " + (char.species || "未知物种");
+                    const descEl = item.querySelector('.text-\\[11px\\].text-gray-500.truncate');
+                    if (descEl) {
+                        descEl.title = char.narrative_function || shortDesc;
+                        descEl.innerText = shortDesc;
+                    }
+                }
+                
+                // If it was already generated, user modification requires regenerating the setting image
+                if (char.avatarUrl) {
+                    regenerateSingleCharacter(editingCharIndex);
+                }
+            } else {
+                renderPendingCharacters(pendingCharacters);
+            }
+        }
+
+        async function renderPendingCharacters(chars) {
+            const list = document.getElementById('characterList');
+            list.innerHTML = ''; // Clear empty state
+            
+            for (let i = 0; i < chars.length; i++) {
+                const char = chars[i];
+                const shortDesc = (char.role || "角色") + " | " + (char.gender || "未知性别") + " | " + (char.species || "未知物种");
+                
+                const html = `
+                    <div class="char-item-pending flex items-center gap-3 bg-white p-2.5 rounded-xl border border-purple-100 w-full shadow-sm">
+                        <div class="avatar-container w-12 h-12 rounded-full bg-gray-50 border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center">
+                            <i data-lucide="image" class="w-4 h-4 text-gray-400"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-bold text-gray-900 truncate flex items-center gap-2">
+                                <span>${char.name}</span>
+                                <button onclick="openCharEditModal(${i})" class="text-gray-300 hover:text-purple-600 transition-colors"><i data-lucide="edit-3" class="w-3 h-3"></i></button>
+                            </div>
+                            <div class="text-[11px] text-gray-500 truncate" title="${char.narrative_function || shortDesc}">${shortDesc}</div>
+                        </div>
+                    </div>
+                `;
+                list.insertAdjacentHTML('beforeend', html);
+            }
+            lucide.createIcons();
+            
+            // Show the "Generate Characters" button
+            document.getElementById('generateCharactersBtn').classList.remove('hidden');
+        }
+
+        async function startPaginationProcess() {
+            const storyText = document.getElementById('expandedStoryText').value;
+            if (!storyText) {
+                appendAIMessage("请先完成故事的扩写！");
+                return;
+            }
+            
+            // Get dynamically recommended page count from extractedStorySummary if available, else fallback
+            let numPages = "5"; // default
+            if (extractedStorySummary && extractedStorySummary.pages) {
+                // Keep only numbers
+                numPages = String(extractedStorySummary.pages).replace(/\D/g, '');
+            } else {
+                 // Try to get from hidden select if updated elsewhere
+                 const pageSelect = document.getElementById('pageCountSelect');
+                 if(pageSelect) numPages = pageSelect.value;
+            }
+            
+            const style = document.getElementById('artStyleSelect').value;
+            const ratio = document.getElementById('aspectRatioSelect').value;
+            
+            appendAIMessage(`收到指令！请在右侧边栏确认好**页面比例、总页数与画风**等参数（目前确认参数：${numPages} 页，${style} 画风，比例 ${ratio}）。如果有需要，你可以直接在右边栏更改它们再确认。\n我们将进行分镜整理...`);
+            const typingIdPagination = showTypingIndicator();
+            scrollToBottom();
+            
+            // 1. Paginate
+            const storyboardJson = await apiStoryPagination(storyText, numPages, style);
+            removeTypingIndicator(typingIdPagination);
+            
+            if (!storyboardJson || !storyboardJson.pages) {
+                appendAIMessage("分页失败，请检查网络或重试。");
+                return;
+            }
+
+            window.currentStoryboard = storyboardJson;
+
+            // Render storyboard for confirmation
+            let storyboardHtml = `<div class="flex flex-col gap-4 mt-2 w-full text-left">`;
+            storyboardHtml += `<div class="text-sm font-bold">📖 分镜剧本确认 (共 ${storyboardJson.pages.length} 页)</div>`;
+            
+            storyboardJson.pages.forEach((page, index) => {
+                storyboardHtml += `
+                    <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
+                        <div class="font-bold text-xs text-purple-600 mb-2">Page ${page.page_number} (模块数: ${page.panel_count})</div>
+                        <div class="mb-2">
+                            <span class="text-[10px] text-gray-500 block mb-1">画面动作与环境:</span>
+                            <textarea id="edit_page_story_${index}" class="w-full text-xs text-gray-700 bg-gray-50 rounded p-2 border border-gray-100 focus:border-purple-300 outline-none resize-none h-16">${page.page_story}</textarea>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-gray-500 block mb-1">对话内容:</span>
+                            <textarea id="edit_page_dialogue_${index}" class="w-full text-xs text-gray-700 bg-gray-50 rounded p-2 border border-gray-100 focus:border-purple-300 outline-none resize-none h-12">${page.dialogue || ''}</textarea>
+                        </div>
+                    </div>
+                `;
+            });
+            storyboardHtml += `</div>`;
+
+            const actionsHtml = `
+                <div class="flex flex-col gap-2 mt-4">
+                        <button onclick="triggerFinalGeneration(true)" class="text-left px-4 py-2.5 bg-white border border-purple-200 hover:border-purple-400 hover:bg-purple-50 text-purple-700 text-[13px] font-semibold rounded-xl transition-all shadow-sm">
+                            确认无误，且需要封面（开始生成分镜故事本）
+                        </button>
+                        <button onclick="triggerFinalGeneration(false)" class="text-left px-4 py-2.5 bg-white border border-purple-200 hover:border-purple-400 hover:bg-purple-50 text-purple-700 text-[13px] font-semibold rounded-xl transition-all shadow-sm">
+                            确认无误，不需要封面（开始生成分镜故事本）
+                        </button>
+                </div>
+            `;
+
+            appendAIMessage(`${storyboardHtml}\n\n这就是完整的分镜剧本。你可以直接在上面的输入框中修改内容。另外，在右侧边栏你还可以**更改漫画的纵横比或重新选择画风**。一旦确认，请选择是否需要一张专门的封面图？\n${actionsHtml}`);
+            
+            // Enable the generate button in the sidebar now that storyboard is ready
+            const genBtn = document.getElementById('generateComicBtn');
+            genBtn.disabled = false;
+            
+            currentStage = 'storyboard_confirmation';
+        }
+
+        async function triggerFinalGeneration(withCover = false) {
+            // Save any manual edits from the UI
+            if (window.currentStoryboard && window.currentStoryboard.pages) {
+                window.currentStoryboard.pages.forEach((page, index) => {
+                    const storyEl = document.getElementById(`edit_page_story_${index}`);
+                    const dialogueEl = document.getElementById(`edit_page_dialogue_${index}`);
+                    if (storyEl) page.page_story = storyEl.value;
+                    if (dialogueEl) page.dialogue = dialogueEl.value;
+                });
+            }
+
+            const storyboardJson = window.currentStoryboard;
+            if (!storyboardJson) {
+                appendAIMessage("请先完成分镜整理！");
+                return;
+            }
+
+            const style = document.getElementById('artStyleSelect').value;
+            const selectedImageModel = document.getElementById('imageModelSelect').value;
+            const ratio = document.getElementById('aspectRatioSelect').value;
+            const totalPages = storyboardJson.pages.length;
+            
+            appendAIMessage(`分镜剧本已确认！现在开始请教 **漫画渲染专家** 绘制每一页，采用的画风为「${style}」，比例为「${ratio}」...请稍候！`);
+            
+            // Disable the generate button
+            const genBtn = document.getElementById('generateComicBtn');
+            genBtn.disabled = true;
+            genBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 生成中...';
+            lucide.createIcons();
+
+            let currentTypingId = showTypingIndicator();
+            scrollToBottom();
+            
+            let previousPanelData = null;
+            window.generatedComicPages = []; // Store generated pages globally for viewer
+
+            // Optionally generate a cover page
+            if (withCover) {
+                removeTypingIndicator(currentTypingId);
+                appendAIMessage(`正在绘制封面...`);
+                currentTypingId = showTypingIndicator();
+                scrollToBottom();
+
+                const coverPage = {
+                    page_number: "Cover",
+                    panel_count: 1,
+                    page_story: `这是整个漫画的封面。提取故事的核心主题和主要角色，设计一个极具视觉冲击力的封面插画，背景可以更抽象或具有象征意义，角色展示最经典的姿态。`,
+                    dialogue: "无",
+                    layout_logic: "单幅大画幅，展现史诗感或故事核心氛围"
+                };
+
+                const result = await apiComicGeneration(coverPage, ratio, style, selectedImageModel, previousPanelData);
+                if (result && result.base64Image) {
+                    previousPanelData = result.rawData;
+                    window.generatedComicPages.push({
+                        ...coverPage,
+                        imgData: result.base64Image,
+                        rawData: result.rawData
+                    });
+                }
+            }
+            
+            for (let i = 0; i < totalPages; i++) {
+                const page = storyboardJson.pages[i];
+                
+                removeTypingIndicator(currentTypingId);
+                appendAIMessage(`正在绘制第 ${i + 1}/${totalPages} 页... \n\n*场景：${page.page_story}*`);
+                currentTypingId = showTypingIndicator();
+                scrollToBottom();
+
+                const result = await apiComicGeneration(page, ratio, style, selectedImageModel, previousPanelData);
+                
+                if (result && result.base64Image) {
+                    previousPanelData = result.rawData;
+                    window.generatedComicPages.push({
+                        ...page,
+                        imgData: result.base64Image,
+                        rawData: result.rawData
+                    });
+                } else {
+                    window.generatedComicPages.push({
+                        ...page,
+                        imgData: null,
+                        error: true
+                    });
+                }
+            }
+            
+            removeTypingIndicator(currentTypingId);
+            
+            // Build the final inline viewer
+            let styleRatio = "1/1";
+            if (ratio === "16:9") styleRatio = "16/9";
+            else if (ratio === "9:16") styleRatio = "9/16";
+            else if (ratio === "4:5") styleRatio = "4/5";
+            else if (ratio === "3:4") styleRatio = "3/4";
+
+            let finalImagesHtml = `<div class="flex flex-col gap-4 mt-2 w-full">`;
+            window.generatedComicPages.forEach((page, index) => {
+                if (page.imgData) {
+                    finalImagesHtml += `
+                        <div class="relative border-2 border-gray-800 bg-white group overflow-hidden w-full" style="aspect-ratio: ${styleRatio};">
+                            <img src="${page.imgData}" class="w-full h-full object-cover block cursor-pointer" onclick="openComicViewer(${index})">
+                            <div class="absolute top-2 left-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded font-bold">PAGE ${page.page_number}</div>
+                            <button class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-bold text-sm" onclick="openComicViewer(${index})">点击进入阅读模式</button>
+                        </div>
+                    `;
+                } else {
+                    finalImagesHtml += `
+                        <div class="relative border-2 border-red-200 bg-red-50 flex items-center justify-center w-full" style="aspect-ratio: 1/1;">
+                            <div class="text-red-500 text-sm font-bold flex flex-col items-center gap-2">
+                                <i data-lucide="image-off" class="w-6 h-6"></i>
+                                第 ${page.page_number} 页生成失败
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+            finalImagesHtml += `</div>`;
+
+            // Reset button
+            genBtn.disabled = false;
+            genBtn.innerHTML = '<i data-lucide="wand-2" class="w-4 h-4"></i> Generate Comic';
+
+            appendAIMessage(`🎉 漫画全部生成完毕！这是您的最终成片：\n${finalImagesHtml}\n\n您可以点击图片进入阅读模式进行单页修改或下载。感谢您的创作！`);
+            lucide.createIcons();
+            
+            currentStage = 'finished';
+        }
+
+        // ==========================================
+        // COMIC VIEWER LOGIC
+        // ==========================================
+
+        let currentViewerIndex = 0;
+
+        function openComicViewer(index) {
+            if (!window.generatedComicPages || window.generatedComicPages.length === 0) return;
+            currentViewerIndex = index;
+            document.getElementById('comicViewerOverlay').classList.remove('hidden');
+            updateComicViewer();
+        }
+
+        function closeComicViewer() {
+            document.getElementById('comicViewerOverlay').classList.add('hidden');
+        }
+
+        function nextComicPage() {
+            if (currentViewerIndex < window.generatedComicPages.length - 1) {
+                currentViewerIndex++;
+                updateComicViewer();
+            }
+        }
+
+        function prevComicPage() {
+            if (currentViewerIndex > 0) {
+                currentViewerIndex--;
+                updateComicViewer();
+            }
+        }
+
+        function updateComicViewer() {
+            const page = window.generatedComicPages[currentViewerIndex];
+            const img = document.getElementById('comicViewerImg');
+            const storyArea = document.getElementById('viewerPageStory');
+            const dialogueArea = document.getElementById('viewerPageDialogue');
+            const indicator = document.getElementById('comicPageIndicator');
+            
+            img.src = page.imgData || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle">Error / Generating</text></svg>';
+            storyArea.value = page.page_story || '';
+            dialogueArea.value = page.dialogue || '';
+            
+            indicator.innerText = `Page ${page.page_number} / ${window.generatedComicPages.length}`;
+            
+            document.getElementById('prevPageBtn').disabled = currentViewerIndex === 0;
+            document.getElementById('nextPageBtn').disabled = currentViewerIndex === window.generatedComicPages.length - 1;
+
+            // Optional: reset viewer chat
+            document.getElementById('viewerChatHistory').innerHTML = '<div class="text-xs text-gray-400 text-center mt-4">在这里输入自然语言指令修改当前页面。</div>';
+            lucide.createIcons();
+        }
+
+        function downloadCurrentPage() {
+            const page = window.generatedComicPages[currentViewerIndex];
+            if (!page || !page.imgData) return alert("没有可下载的图像");
+            const link = document.createElement('a');
+            link.download = `comic_page_${page.page_number}.png`;
+            link.href = page.imgData;
+            link.click();
+        }
+
+        function downloadAllPages() {
+            // Note: For ZIP or PDF in a real app, you'd use a library like JSZip or jsPDF.
+            // For now, we'll just trigger sequential downloads to simulate downloading all.
+            if (!window.generatedComicPages || window.generatedComicPages.length === 0) return;
+            
+            window.generatedComicPages.forEach((page, idx) => {
+                if (page.imgData) {
+                    setTimeout(() => {
+                        const link = document.createElement('a');
+                        link.download = `comic_page_${page.page_number}.png`;
+                        link.href = page.imgData;
+                        link.click();
+                    }, idx * 500); // Staggered to prevent browser blocking
+                }
+            });
+            alert("正在依次下载所有页面，请在真实环境中集成 JSZip 打包功能。");
+        }
+
+        async function regenerateCurrentPage() {
+            const page = window.generatedComicPages[currentViewerIndex];
+            if (!page) return;
+
+            // Sync user manual edits back to the object
+            page.page_story = document.getElementById('viewerPageStory').value;
+            page.dialogue = document.getElementById('viewerPageDialogue').value;
+
+            const style = document.getElementById('artStyleSelect').value;
+            const selectedImageModel = document.getElementById('imageModelSelect').value;
+            const ratio = document.getElementById('aspectRatioSelect').value;
+            
+            // For continuity, we try to grab the previous panel's data
+            let previousPanelData = null;
+            if (currentViewerIndex > 0) {
+                const prevPage = window.generatedComicPages[currentViewerIndex - 1];
+                if (prevPage && prevPage.rawData) {
+                    previousPanelData = prevPage.rawData;
+                }
+            }
+
+            appendViewerMessage("系统", "正在使用新设定为您重新生成当前页面...");
+            const imgEl = document.getElementById('comicViewerImg');
+            imgEl.style.opacity = '0.5';
+
+            const result = await apiComicGeneration(page, ratio, style, selectedImageModel, previousPanelData);
+            imgEl.style.opacity = '1';
+
+            if (result && result.base64Image) {
+                page.imgData = result.base64Image;
+                page.rawData = result.rawData;
+                imgEl.src = result.base64Image;
+                appendViewerMessage("系统", "重新生成完毕！");
+            } else {
+                appendViewerMessage("系统", "重新生成失败，请重试。");
+            }
+        }
+
+        async function sendViewerMessage() {
+            const input = document.getElementById('viewerChatInput');
+            const text = input.value.trim();
+            if (!text) return;
+            
+            appendViewerMessage("你", text);
+            input.value = '';
+
+            const page = window.generatedComicPages[currentViewerIndex];
+            
+            appendViewerMessage("系统", "正在理解您的修改意图并重写本页剧本...");
+            
+            // Simple prompt to revise this specific page
+            const prompt = `这是当前第 ${page.page_number} 页的漫画设定：
+画面与动作：${page.page_story}
+对话内容：${page.dialogue}
+
+用户的修改意见：${text}
+
+请根据意见更新当前页面的设定，返回合法的 JSON 对象，包含 "page_story" 和 "dialogue" 两个字段。不要输出其他解释。`;
+
+            const resultText = await makeGeminiRequest(MODELS.TEXT, "你是一个漫画编辑，负责修改当前页的剧本。只输出 JSON。", prompt, true);
+            
+            try {
+                const cleanStr = resultText.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
+                const revised = JSON.parse(cleanStr);
+                
+                if (revised.page_story) page.page_story = revised.page_story;
+                if (revised.dialogue !== undefined) page.dialogue = revised.dialogue;
+                
+                document.getElementById('viewerPageStory').value = page.page_story;
+                document.getElementById('viewerPageDialogue').value = page.dialogue;
+
+                appendViewerMessage("系统", "剧本已更新，你可以修改细节后点击「重新生成此页」。");
+            } catch(e) {
+                appendViewerMessage("系统", "理解修改意图失败，请手动修改上方剧本框后重试。");
+            }
+        }
+
+        function appendViewerMessage(role, text) {
+            const history = document.getElementById('viewerChatHistory');
+            const isUser = role === '你';
+            
+            const html = `
+                <div class="flex gap-2 ${isUser ? 'justify-end' : ''}">
+                    ${!isUser ? `<div class="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center shrink-0 mt-1"><i data-lucide="bot" class="w-3 h-3 text-purple-600"></i></div>` : ''}
+                    <div class="max-w-[85%]">
+                        <div class="text-[10px] text-gray-400 mb-0.5 ${isUser ? 'text-right' : ''}">${role}</div>
+                        <div class="p-2.5 text-xs rounded-xl ${isUser ? 'bg-purple-600 text-white rounded-br-none' : 'bg-white border border-gray-100 shadow-sm rounded-bl-none text-gray-700'}">
+                            ${text.replace(/\n/g, '<br>')}
+                        </div>
+                    </div>
+                </div>
+            `;
+            history.insertAdjacentHTML('beforeend', html);
+            history.scrollTop = history.scrollHeight;
+            lucide.createIcons();
+        }
+
+        // Initialize lucide icons on load
+        lucide.createIcons();
+
+    </script>
+</body>
+</html>
