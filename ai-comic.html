@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeShop AI - Comic Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #FFFFFF; color: #111827; overflow: hidden; }
+        .weshop-shadow { box-shadow: 0 20px 50px rgba(0, 0, 0, 0.06); }
+        .char-dash-box { border: 2px dashed #7C3AED; background-color: #FDFEFE; transition: all 0.3s ease; }
+        
+        /* 选中状态视觉 */
+        .char-card-selected { border: 2px solid #7C3AED !important; background-color: #F5F3FF !important; }
+        .char-card-selected .check-badge { display: flex !important; }
+
+        .modal-overlay { background: rgba(17, 24, 39, 0.4); backdrop-filter: blur(8px); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        /* 故事扩充动画 */
+        .agent-processing { animation: pulse 1.5s infinite; color: #7C3AED; font-weight: 600; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body class="flex h-screen bg-white">
+
+    <aside class="w-64 border-r border-gray-100 flex flex-col shrink-0">
+        <div class="p-6 flex items-center gap-2">
+            <div class="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white italic font-bold text-xl">W</div>
+            <span class="text-xl font-bold tracking-tight">WeShop AI</span>
+        </div>
+        <nav class="flex-1 pt-2">
+            <div class="px-6 py-2 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Workspace</div>
+            <a href="#" class="flex items-center px-6 py-3 text-sm font-semibold bg-purple-50 border-r-4 border-purple-600 text-purple-600">
+                <i data-lucide="pen-tool" class="w-4 h-4 mr-3"></i> Comic generator
+            </a>
+        </nav>
+    </aside>
+
+    <main class="flex-1 flex flex-col bg-[#F9FAFB] relative overflow-y-auto">
+        <header class="h-16 flex items-center justify-between px-8 gap-4 border-b border-gray-100 bg-white">
+            <h1 class="text-lg font-bold text-gray-900">Studio Mode</h1>
+            <div class="flex items-center gap-4">
+                <!-- API Key Input Exposed -->
+                <div class="flex items-center bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 focus-within:border-purple-400 focus-within:ring-2 focus-within:ring-purple-50 transition-all relative">
+                    <i data-lucide="key" class="w-4 h-4 text-gray-400 mr-2"></i>
+                    <input type="password" id="apiKeyInput" placeholder="Enter Gemini API Key..." class="bg-transparent border-none outline-none text-xs w-48 text-gray-700 placeholder-gray-400 pr-6" onblur="testApiKey()">
+                    <div id="apiKeyStatusCheck" class="absolute right-3 hidden">
+                        <i data-lucide="check" class="w-4 h-4 text-green-500"></i>
+                    </div>
+                    <div id="apiKeyStatusError" class="absolute right-3 hidden">
+                        <i data-lucide="x" class="w-4 h-4 text-red-500"></i>
+                    </div>
+                    <div id="apiKeyLoading" class="absolute right-3 hidden">
+                        <i data-lucide="loader-2" class="w-4 h-4 text-gray-400 animate-spin"></i>
+                    </div>
+                </div>
+
+                <div class="text-[10px] font-bold text-green-500 bg-green-50 px-2 py-1 rounded-full uppercase tracking-widest">System Ready</div>
+                <div class="w-8 h-8 rounded-full bg-gray-200"></div>
+            </div>
+        </header>
+
+        <div class="max-w-4xl mx-auto w-full py-12 px-6">
+            <h2 class="text-3xl font-bold text-gray-900 mb-10 text-center">Comic Generator</h2>
+
+            <div class="bg-white rounded-[32px] weshop-shadow border border-gray-100 p-6 mb-6">
+                <!-- Top: attached characters / models -->
+                <div class="flex gap-3 flex-wrap items-center mb-4" id="attachedCharacters">
+                    <button type="button" id="addCharBtn" onclick="openModal()" class="w-16 h-16 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-600 transition-colors">
+                        <i data-lucide="plus" class="w-5 h-5 mb-1"></i>
+                        <span class="text-[9px] font-bold uppercase tracking-wider">Role</span>
+                    </button>
+                </div>
+                
+                <!-- Middle: Text Input -->
+                <textarea id="storyInput" class="w-full h-32 bg-gray-50/50 rounded-2xl p-5 text-base text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-50 transition-all resize-none mb-4" placeholder="Enter your core idea, e.g. 'A cat traveling through space finding a new home...'"></textarea>
+                
+                <!-- Bottom: Options and One-Click Generate -->
+                <div class="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-gray-50 gap-4">
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <div class="flex items-center bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
+                            <span class="text-[11px] font-bold text-gray-500 mr-2">Style:</span>
+                            <select id="artStyleSelect" class="bg-transparent text-gray-800 text-[12px] font-bold outline-none cursor-pointer">
+                                <option value="Japanese manga style, clean linework, cel shading, detailed backgrounds">Japanese Manga</option>
+                                <option value="Western superhero comic style, dynamic inking, vibrant colors">Western Superhero</option>
+                                <option value="Gritty noir graphic novel style, high contrast black and white, heavy shadows">Noir Graphic Novel</option>
+                                <option value="Moebius style European comic, surreal colors, thin delicate lines">European Sci-Fi</option>
+                                <option value="Cinematic concept art style, painterly, realistic lighting">Cinematic</option>
+                            </select>
+                        </div>
+
+                        <div class="flex items-center bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
+                            <span class="text-[11px] font-bold text-gray-500 mr-2">Ratio:</span>
+                            <select id="aspectRatioSelect" class="bg-transparent text-gray-800 text-[12px] font-bold outline-none cursor-pointer">
+                                <option value="1:1">1:1 Square</option>
+                                <option value="3:4" selected>3:4 Standard</option>
+                                <option value="9:16">9:16 Webtoon</option>
+                                <option value="16:9">16:9 Cinematic</option>
+                            </select>
+                        </div>
+
+                        <div class="flex items-center bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
+                            <span class="text-[11px] font-bold text-gray-500 mr-2">Pages:</span>
+                            <select id="pageSelect" class="bg-transparent text-gray-800 text-[12px] font-bold outline-none cursor-pointer">
+                                <option value="1">1 Page</option>
+                                <option value="2">2 Pages</option>
+                                <option value="5" selected>5 Pages</option>
+                                <option value="10">10 Pages</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-4">
+                        <div id="agentStatus" class="text-[11px] font-bold text-gray-400"></div>
+                        <button type="button" id="oneClickGenerateBtn" onclick="handleOneClickGenerate()" class="bg-[#7C3AED] hover:bg-[#6D28D9] text-white px-8 py-3.5 rounded-2xl font-bold transition-all flex items-center gap-3 shadow-lg shadow-purple-100">
+                            <span>Generate</span>
+                            <i data-lucide="sparkles" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="expandedStoryBox" class="hidden mb-6 p-5 bg-purple-50/30 border border-purple-100 rounded-2xl animate-in fade-in">
+                <div class="flex items-center gap-2 mb-4 text-purple-600">
+                    <i data-lucide="wand-2" class="w-4 h-4"></i>
+                    <span class="text-[11px] font-bold uppercase">AI Structured Storyboard</span>
+                </div>
+                <div id="expandedContent"></div>
+            </div>
+
+            <!-- 最终生成的漫画展示区 -->
+            <div id="comicResultBox" class="hidden bg-white rounded-[32px] weshop-shadow border border-gray-100 p-8 mt-6 mb-12">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-lg font-bold text-gray-900">Final Comic</h3>
+                    <div id="comicGenProgress" class="flex items-center gap-3 hidden">
+                        <div class="w-48 h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div id="progressBar" class="h-full bg-purple-600 w-0 transition-all duration-300"></div>
+                        </div>
+                        <span id="progressText" class="text-[11px] font-bold text-purple-600 uppercase">Generating 0/4...</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" id="downloadZipBtn" onclick="downloadAllPanels()" class="hidden bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2">
+                            <i data-lucide="folder-down" class="w-4 h-4"></i> Download All
+                        </button>
+                        <button type="button" id="downloadFullComicBtn" onclick="downloadFullComic()" class="hidden bg-black hover:bg-gray-800 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2">
+                            <i data-lucide="image" class="w-4 h-4"></i> Download Page
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="comicWrapper" class="bg-white p-3 md:p-6 w-full max-w-4xl mx-auto border-4 border-black shadow-2xl relative hidden flex flex-col justify-center">
+                    <!-- Ensure the wrapper roughly acts like a page, aspect ratio can be enforced or let content drive it -->
+                    <div id="comicGrid" class="flex flex-wrap gap-3 bg-white w-full content-start justify-center">
+                        <!-- Images will be injected here with dynamic layout -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="charModal" class="fixed inset-0 modal-overlay z-50 flex items-center justify-center hidden">
+        <div class="bg-white w-[800px] rounded-[32px] shadow-2xl overflow-hidden flex flex-col">
+            <div class="p-6 border-b border-gray-50 flex justify-between items-center">
+                <h3 class="text-lg font-bold">Character Forge</h3>
+                <button type="button" onclick="closeModal()" class="text-gray-400"><i data-lucide="x"></i></button>
+            </div>
+            <div class="flex h-[450px]">
+                <div class="w-1/2 p-8 space-y-4">
+                    <input id="charName" type="text" class="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none" placeholder="Name">
+                    <textarea id="charDesc" class="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm h-24 outline-none" placeholder="Description"></textarea>
+                    <div class="relative h-32 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center text-gray-400 text-xs cursor-pointer hover:bg-gray-50 transition-colors" onclick="document.getElementById('charImage').click()">
+                        <i data-lucide="upload" class="w-6 h-6 mb-2 text-gray-400" id="uploadIcon"></i>
+                        <span id="charImageText">Reference Image (Optional)</span>
+                        <input type="file" id="charImage" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+                        <img id="charImagePreview" class="absolute inset-0 w-full h-full object-cover rounded-xl hidden">
+                    </div>
+                </div>
+                <div class="w-1/2 p-8 bg-gray-50/50 flex flex-col">
+                    <div id="previewBox" class="flex-1 bg-white rounded-2xl border border-gray-100 mb-4 flex items-center justify-center overflow-hidden">
+                        <i data-lucide="image" class="text-gray-200 w-12 h-12"></i>
+                        <img id="tempResultImg" class="hidden w-full h-full object-cover">
+                    </div>
+                    <button type="button" id="modalGenBtn" onclick="generateAvatarPreview()" class="w-full bg-purple-600 text-white py-3 rounded-xl text-xs font-bold">Generate Avatar</button>
+                    <div id="manualUploadSection" class="mt-4">
+                        <div class="flex items-center justify-between text-xs text-gray-400 mb-3">
+                            <span class="h-px bg-gray-200 flex-1"></span>
+                            <span class="px-2">OR</span>
+                            <span class="h-px bg-gray-200 flex-1"></span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="button" onclick="document.getElementById('manualDesignUpload').click()" class="flex-1 bg-white border border-gray-200 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50">Upload Design</button>
+                            <button type="button" onclick="document.getElementById('manualAvatarUpload').click()" class="flex-1 bg-white border border-gray-200 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50">Upload Avatar</button>
+                        </div>
+                        <input type="file" id="manualDesignUpload" accept="image/*" class="hidden" onchange="handleManualDesign(event)">
+                        <input type="file" id="manualAvatarUpload" accept="image/*" class="hidden" onchange="handleManualAvatar(event)">
+                    </div>
+                    <div id="modalConfirmActions" class="hidden flex gap-2 mt-4">
+                        <button type="button" onclick="generateAvatarPreview()" class="flex-1 bg-white border border-gray-200 py-3 rounded-xl text-xs font-bold">Reshoot</button>
+                        <button type="button" onclick="saveCharacterToGrid()" class="flex-1 bg-black text-white py-3 rounded-xl text-xs font-bold">Save Character</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // --- 数据状态管理 ---
+        let state = {
+            characters: [], // Store all created characters here
+            selectedCharacters: [], // 存储已选角色的 ID/对象
+            pages: 5,
+            ratio: "1:1",
+            originalStory: "",
+            expandedStory: ""
+        };
+        let editingCharId = null;
+
+        // --- 角色选择逻辑 ---
+        function toggleCharacterSelection(element, charData) {
+            const isSelected = element.classList.toggle('char-card-selected');
+            if (isSelected) {
+                state.selectedCharacters.push(charData);
+            } else {
+                state.selectedCharacters = state.selectedCharacters.filter(c => c.id !== charData.id);
+            }
+            document.getElementById('selectedCount').innerText = `${state.selectedCharacters.length} Selected`;
+        }
+
+        // --- 核心 Agent Prompts ---
+        const SYSTEM_PROMPTS = {
+            STORY_EXPANSION: `你是一个故事扩写与叙事生成 Agent。用户输入可能是一句话故事、梗概或关键词。你需要产出一篇完整、连贯、可用于后续漫画分页的故事正文。包含清晰的起承转合，交代时间、地点、人物、事件。不得输出任何解释或格式，纯文本输出。`,
+            
+            CHARACTER_EXTRACTION: `你是一个角色提取与视觉结构化 Agent。从用户给出的故事中提取所有主要角色。
+必须输出严格合法的 JSON 数组，不带额外文本或 Markdown。
+示例格式：
+[
+  {
+    "name": "Role Name",
+    "role": "主角",
+    "gender": "男",
+    "species": "人类",
+    "apparent_age_stage": "青年",
+    "distinct_physical_traits": ["短发", "高大"],
+    "core_traits": ["勇敢"],
+    "visual_energy_profile": "有活力的"
+  }
+]`,
+
+            STORY_PAGINATION: `你是一个漫画分页结构化 Agent。用户将提供一个故事文本和页面比例。
+将故事整理为分页结构，输出合法的 JSON 对象，不带任何 Markdown 或多余文本。
+必须包含 fields:
+{
+  "project": "标题",
+  "master_page_ratio": "1:1",
+  "global_layout_strategy": "...",
+  "pages": [
+    {
+      "page_number": 1,
+      "panel_count": 4,
+      "page_story": "具体画面的情节描述...",
+      "dialogue": "角色对白",
+      "layout_logic": "排版思路"
+    }
+  ]
+}`,
+
+            COMIC_RENDER: `You are a Comic Page Rendering Agent. You must render the final comic page directly based on the JSON story and reference images. No text, no markdown.`
+        };
+
+        const MODELS = {
+            TEXT: "gemini-3.1-pro-preview",
+            IMAGE: "gemini-3-pro-image-preview",
+            IMAGE_FAST: "gemini-3.1-flash-image-preview"
+        };
+
+        // Get API Key
+        function getApiKey() {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            if (!key) {
+                alert("Please enter your Gemini API Key at the top first.");
+                return null;
+            }
+            return key;
+        }
+
+        async function testApiKey() {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            if (!key) return;
+
+            const statusCheck = document.getElementById('apiKeyStatusCheck');
+            const statusError = document.getElementById('apiKeyStatusError');
+            const loadingIcon = document.getElementById('apiKeyLoading');
+            
+            statusCheck.classList.add('hidden');
+            statusError.classList.add('hidden');
+            loadingIcon.classList.remove('hidden');
+
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${key}`;
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: "Explain how AI works in a few words" }] }]
+                    })
+                });
+                
+                if (response.ok) {
+                    statusCheck.classList.remove('hidden');
+                } else {
+                    statusError.classList.remove('hidden');
+                }
+            } catch (error) {
+                statusError.classList.remove('hidden');
+            } finally {
+                loadingIcon.classList.add('hidden');
+            }
+        }
+
+        async function makeGeminiRequest(model, systemPrompt, userTextOrContents, forceJSON = false) {
+            const apiKey = getApiKey();
+            if (!apiKey) return null;
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            let contents = typeof userTextOrContents === 'string' 
+                ? [{ parts: [{ text: userTextOrContents }] }] 
+                : userTextOrContents;
+
+            const body = {
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents: contents,
+            };
+
+            if (forceJSON) body.generationConfig = { responseMimeType: "application/json" };
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                });
+                const data = await response.json();
+                if (data.candidates && data.candidates[0].content.parts) {
+                    return data.candidates[0].content.parts[0].text;
+                }
+                return null;
+            } catch (err) {
+                console.error("API Error:", err);
+                return null;
+            }
+        }
+
+        async function apiCharacterDesign(charObj) {
+            const apiKey = getApiKey();
+            if (!apiKey) return null;
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.IMAGE_FAST}:generateContent?key=${apiKey}`;
+            const prompt = `A professional character turnaround sheet on a clean light gray studio background. 
+Character Name: ${charObj.name}
+Role: ${charObj.role}
+Gender: ${charObj.gender || 'Unknown'}
+Species: ${charObj.species}
+Age Stage: ${charObj.apparent_age_stage}
+Physical Traits: ${(charObj.distinct_physical_traits || []).join(', ')}
+Visual Energy: ${charObj.visual_energy_profile}`;
+
+            const body = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { responseModalities: ["IMAGE"] }
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                });
+                const data = await response.json();
+                if (data.candidates && data.candidates[0].content.parts) {
+                    for (const part of data.candidates[0].content.parts) {
+                        if (part.inlineData) {
+                            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                        }
+                    }
+                }
+                return null;
+            } catch (err) {
+                return null;
+            }
+        }
+
+        async function handleOneClickGenerate() {
+            const prompt = document.getElementById('storyInput').value.trim();
+            if (!prompt) return alert('Please enter a story idea.');
+
+            const btn = document.getElementById('oneClickGenerateBtn');
+            const status = document.getElementById('agentStatus');
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+            
+            // UI Reset
+            document.getElementById('comicResultBox').classList.add('hidden');
+            document.getElementById('expandedStoryBox').classList.add('hidden');
+            const grid = document.getElementById('comicGrid');
+            grid.innerHTML = '';
+            
+            try {
+                // 1. Story Expansion
+                status.innerHTML = `<span class="agent-processing">Agent: Expanding story...</span>`;
+                const expandedStory = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.STORY_EXPANSION, `Core Idea: ${prompt}`);
+                if (!expandedStory) throw new Error("Story expansion failed.");
+
+                // Show expanded story logic (readonly)
+                const expandedBox = document.getElementById('expandedStoryBox');
+                const expandedContent = document.getElementById('expandedContent');
+                expandedContent.innerHTML = `<div class="text-sm text-gray-700 whitespace-pre-wrap">${expandedStory}</div>`;
+                expandedBox.classList.remove('hidden');
+
+                // 2. Character Extraction
+                status.innerHTML = `<span class="agent-processing">Agent: Extracting characters...</span>`;
+                const extractedJson = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.CHARACTER_EXTRACTION, `Story:\n${expandedStory}`, true);
+                let extractedChars = [];
+                try {
+                    const cleanJson = (extractedJson || "[]").replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                    extractedChars = JSON.parse(cleanJson);
+                } catch (e) {
+                    console.error("Parse error for chars:", e);
+                }
+
+                // 3. Character Design (Auto-generate missing ones)
+                status.innerHTML = `<span class="agent-processing">Agent: Designing characters...</span>`;
+                for (let char of extractedChars) {
+                    // Check if user already provided this character (by name approx)
+                    const exists = state.selectedCharacters.find(c => c.name.toLowerCase().includes(char.name.toLowerCase()) || char.name.toLowerCase().includes(c.name.toLowerCase()));
+                    if (!exists) {
+                        const avatar = await apiCharacterDesign(char);
+                        if (avatar) {
+                            char.avatar = avatar;
+                            // Add to UI as well
+                            const id = Date.now() + Math.random();
+                            const charData = { id, name: char.name, desc: char.role, avatar, designSheet: avatar, img: avatar };
+                            
+                            const attachGrid = document.getElementById('attachedCharacters');
+                            const card = document.createElement('div');
+                            card.className = "relative w-16 h-16 rounded-2xl border-2 border-transparent bg-white p-0.5 flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden group shadow-sm char-card-selected";
+                            state.selectedCharacters.push(charData);
+                            card.innerHTML = `
+                                <div class="check-badge absolute top-1 right-1 w-4 h-4 bg-purple-600 rounded-full flex items-center justify-center z-10">
+                                    <i data-lucide="check" class="w-2.5 h-2.5 text-white"></i>
+                                </div>
+                                <img src="${avatar}" class="w-full h-full rounded-xl object-cover relative z-0">
+                                <div class="absolute bottom-0 inset-x-0 bg-black/50 backdrop-blur-sm p-0.5 text-center">
+                                    <span class="char-name-label text-[8px] font-bold text-white uppercase truncate w-full block">${char.name}</span>
+                                </div>
+                            `;
+                            const addButton = document.getElementById('addCharBtn');
+                            if (addButton) attachGrid.insertBefore(card, addButton);
+                            else attachGrid.appendChild(card);
+                        }
+                    }
+                }
+                lucide.createIcons();
+
+                // 4. Story Pagination
+                status.innerHTML = `<span class="agent-processing">Agent: Structuring storyboard...</span>`;
+                const pagesCount = document.getElementById('pageSelect').value;
+                const style = document.getElementById('artStyleSelect').value;
+                const ratio = document.getElementById('aspectRatioSelect').value;
+                
+                const storyboardRes = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.STORY_PAGINATION, `Pages: ${pagesCount}\nRatio: ${ratio}\nStyle: ${style}\n\nStory:\n${expandedStory}`, true);
+                if (!storyboardRes) throw new Error("Pagination failed.");
+                
+                let storyboardJson;
+                try {
+                    const cleanStr = storyboardRes.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                    storyboardJson = JSON.parse(cleanStr);
+                } catch(e) {
+                    throw new Error("Invalid storyboard format.");
+                }
+
+                // Update UI to show we are generating images now
+                document.getElementById('comicResultBox').classList.remove('hidden');
+                document.getElementById('comicWrapper').classList.remove('hidden');
+                const progressBox = document.getElementById('comicGenProgress');
+                const progressBar = document.getElementById('progressBar');
+                const progressText = document.getElementById('progressText');
+                progressBox.classList.remove('hidden');
+
+                // 5. Comic Generation
+                status.innerHTML = `<span class="agent-processing">Agent: Rendering pages...</span>`;
+                
+                let charContextText = "CRITICAL CHARACTER REFERENCES:\\n";
+                let inlineDataParts = [];
+                state.selectedCharacters.slice(0, 5).forEach((char, index) => {
+                    charContextText += `- Character Name: "${char.name}". This is Reference Image ${index + 1}. You MUST strictly copy their exact facial features, hair, clothing, etc.\\n`;
+                    let mimeType = "image/jpeg";
+                    let base64Data = "";
+                    if (char.avatar && char.avatar.startsWith('data:')) {
+                        const parts = char.avatar.split(',');
+                        mimeType = parts[0].split(':')[1].split(';')[0];
+                        base64Data = parts[1];
+                        inlineDataParts.push({ inlineData: { mimeType: mimeType, data: base64Data } });
+                    }
+                });
+
+                const total = storyboardJson.pages.length;
+                let previousPanelData = null;
+                
+                let styleRatio = "1/1";
+                if (ratio === "16:9") styleRatio = "16/9";
+                else if (ratio === "9:16") styleRatio = "9/16";
+                else if (ratio === "4:5") styleRatio = "4/5";
+                else if (ratio === "3:4") styleRatio = "3/4";
+
+                for (let i = 0; i < total; i++) {
+                    const page = storyboardJson.pages[i];
+                    progressText.innerText = `Generating Page ${i + 1}/${total}...`;
+                    progressBar.style.width = `${(i / total) * 100}%`;
+
+                    const scenePrompt = `[CHARACTER REFERENCES]
+${charContextText}
+[ART STYLE OVERRIDE]
+Render in style: ${style}.
+NO WATERMARKS, NO SIGNATURES, NO LOGOS.
+[PAGE INSTRUCTIONS]
+Page ${page.page_number}.
+Action & Environment: ${page.page_story}
+Dialogue (draw speech bubbles): "${page.dialogue || "None"}"
+Panel Count: ${page.panel_count}
+Layout Logic: ${page.layout_logic}`;
+
+                    let requestParts = [{ text: SYSTEM_PROMPTS.COMIC_RENDER + "\n\n" + scenePrompt }];
+                    if (previousPanelData) {
+                        requestParts.push({ text: "Use the following image as a STRICT STYLE AND ATMOSPHERE REFERENCE for continuity. Do NOT copy the action, ONLY art style:" });
+                        requestParts.push({ inlineData: { mimeType: previousPanelData.mimeType, data: previousPanelData.data } });
+                    }
+                    requestParts = requestParts.concat(inlineDataParts);
+
+                    try {
+                        const apiKey = getApiKey();
+                        if (!apiKey) throw new Error("API Key missing");
+                        const imgUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.IMAGE}:generateContent?key=${apiKey}`;
+                        const imgRes = await fetch(imgUrl, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                contents: [{ parts: requestParts }],
+                                generationConfig: {
+                                    responseModalities: ["IMAGE"],
+                                    imageConfig: { aspectRatio: ratio }
+                                }
+                            })
+                        });
+                        const imgData = await imgRes.json();
+
+                        if (imgData.candidates && imgData.candidates[0].content.parts) {
+                            for (const part of imgData.candidates[0].content.parts) {
+                                if (part.inlineData) {
+                                    const base64Image = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                                    previousPanelData = part.inlineData; // Save for next page
+                                    
+                                    const imgContainer = document.createElement('div');
+                                    imgContainer.className = `relative border-[3px] border-black bg-white flex flex-col group overflow-hidden w-full shrink-0 grow-0`;
+                                    imgContainer.style.aspectRatio = styleRatio;
+                                    imgContainer.innerHTML = `
+                                        <img src="${base64Image}" class="w-full h-full object-cover block">
+                                        <button type="button" onclick="downloadPanel('${base64Image}', 'page_${page.page_number}')" class="download-btn absolute top-3 right-3 bg-black/70 hover:bg-black text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-20" data-html2canvas-ignore="true">
+                                            <i data-lucide="download" class="w-4 h-4"></i>
+                                        </button>
+                                    `;
+                                    grid.appendChild(imgContainer);
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Page Gen Error:", e);
+                    }
+                }
+                
+                progressBar.style.width = '100%';
+                progressText.innerText = "Complete ✨";
+                setTimeout(() => { progressBox.classList.add('hidden'); }, 2000);
+                
+                document.getElementById('downloadFullComicBtn').classList.remove('hidden');
+                document.getElementById('downloadZipBtn').classList.remove('hidden');
+                status.innerText = "Generation Complete!";
+                lucide.createIcons();
+                
+            } catch (e) {
+                console.error(e);
+                status.innerHTML = `<span class="text-red-500">Error: ${e.message}</span>`;
+            }
+
+            btn.disabled = false;
+            btn.classList.remove('opacity-50');
+        }
+
+        // Leave existing UI helper functions intact but dummy out the structure handle
+        function handleStructureStoryboard() {
+            // Replaced by One-Click handle
+            handleOneClickGenerate();
+        }
+
+        function handleGenerateComic() {
+             // Replaced by One-Click handle
+            handleOneClickGenerate();
+        }
+
+        function downloadPanel(dataUrl, filename) {
+            const link = document.createElement('a');
+            link.download = `${filename}.png`;
+            link.href = dataUrl;
+            link.click();
+        }
+
+        function downloadAllPanels() {
+            const images = document.querySelectorAll('#comicGrid img');
+            if (images.length === 0) return;
+            
+            images.forEach((img, index) => {
+                setTimeout(() => {
+                    const link = document.createElement('a');
+                    link.download = `comic_panel_${index + 1}.png`;
+                    link.href = img.src;
+                    link.click();
+                }, index * 300); // slight delay to prevent browser blocking multiple downloads
+            });
+        }
+
+        async function downloadFullComic() {
+            const wrapper = document.getElementById('comicWrapper');
+            const btn = document.getElementById('downloadFullComicBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Exporting...';
+            lucide.createIcons();
+            
+            try {
+                const canvas = await html2canvas(wrapper, {
+                    scale: 2, // High resolution
+                    useCORS: true,
+                    backgroundColor: '#FFFFFF',
+                    onclone: (clonedDoc) => {
+                        // Hide individual download buttons in the clone
+                        const btns = clonedDoc.querySelectorAll('.download-btn');
+                        btns.forEach(b => b.style.display = 'none');
+                    }
+                });
+                
+                const link = document.createElement('a');
+                link.download = 'my-comic-page.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            } catch (err) {
+                console.error("Export failed:", err);
+                alert("Failed to export comic page.");
+            }
+            btn.innerHTML = originalText;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            btn.disabled = false;
+            lucide.createIcons();
+        }
+
+        function updatePageData(index, field, value) {
+            if (!state.expandedStoryData || !state.expandedStoryData.pages[index]) return;
+            
+            if (field === 'page_story') {
+                state.expandedStoryData.pages[index].page_story = value;
+            } else if (field === 'dialogue') {
+                state.expandedStoryData.pages[index].dialogue = value;
+            } else if (field === 'panel_count') {
+                state.expandedStoryData.pages[index].panel_count = parseInt(value, 10);
+            }
+            console.log(`Updated Page ${index + 1}:`, state.expandedStoryData.pages[index]);
+        }
+
+        // --- 弹窗逻辑辅助 ---
+        let uploadedImageBase64 = null;
+        let uploadedImageMimeType = null;
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const base64String = e.target.result;
+                    uploadedImageBase64 = base64String.split(',')[1];
+                    uploadedImageMimeType = file.type;
+                    
+                    const preview = document.getElementById('charImagePreview');
+                    preview.src = base64String;
+                    preview.classList.remove('hidden');
+                    document.getElementById('charImageText').classList.add('hidden');
+                    const icon = document.getElementById('uploadIcon');
+                    if (icon) icon.classList.add('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function handleManualDesign(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('tempResultImg').src = e.target.result;
+                document.getElementById('tempResultImg').classList.remove('hidden');
+                document.getElementById('modalGenBtn').classList.add('hidden');
+                document.getElementById('manualUploadSection').classList.add('hidden');
+                document.getElementById('modalConfirmActions').classList.remove('hidden');
+                if (!window.lastGeneratedAvatar) window.lastGeneratedAvatar = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function handleManualAvatar(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                window.lastGeneratedAvatar = e.target.result;
+                if (document.getElementById('tempResultImg').classList.contains('hidden')) {
+                    document.getElementById('tempResultImg').src = e.target.result;
+                    document.getElementById('tempResultImg').classList.remove('hidden');
+                    document.getElementById('modalGenBtn').classList.add('hidden');
+                    document.getElementById('manualUploadSection').classList.add('hidden');
+                    document.getElementById('modalConfirmActions').classList.remove('hidden');
+                }
+                alert("Avatar uploaded successfully!");
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function openModal() {
+            editingCharId = null;
+            document.getElementById('charModal').classList.remove('hidden');
+            document.getElementById('charName').value = '';
+            document.getElementById('charDesc').value = '';
+            
+            const previewInput = document.getElementById('charImagePreview');
+            if(previewInput) {
+                previewInput.classList.add('hidden');
+                previewInput.src = '';
+            }
+            
+            const textElement = document.getElementById('charImageText');
+            if(textElement) textElement.classList.remove('hidden');
+            
+            const icon = document.getElementById('uploadIcon');
+            if (icon) icon.classList.remove('hidden');
+            
+            uploadedImageBase64 = null;
+            uploadedImageMimeType = null;
+            
+            document.getElementById('tempResultImg').classList.add('hidden');
+            document.getElementById('tempResultImg').src = '';
+            document.getElementById('modalGenBtn').classList.remove('hidden');
+            document.getElementById('modalGenBtn').innerText = 'Generate Avatar';
+            document.getElementById('manualUploadSection').classList.remove('hidden');
+            document.getElementById('modalConfirmActions').classList.add('hidden');
+            window.lastGeneratedAvatar = null;
+        }
+        function closeModal() { document.getElementById('charModal').classList.add('hidden'); }
+
+        function editCharacter(event, id) {
+            if (event) {
+                event.stopPropagation();
+                event.preventDefault();
+            }
+            const char = state.characters.find(c => c.id === id);
+            if (!char) return;
+            editingCharId = id;
+            
+            document.getElementById('charName').value = char.name;
+            document.getElementById('charDesc').value = char.desc || '';
+            
+            const preview = document.getElementById('tempResultImg');
+            preview.src = char.designSheet || char.avatar;
+            preview.classList.remove('hidden');
+            window.lastGeneratedAvatar = char.avatar;
+            
+            // Show the image in the left side upload box too for context
+            const previewInput = document.getElementById('charImagePreview');
+            if (previewInput) {
+                previewInput.src = char.designSheet || char.avatar;
+                previewInput.classList.remove('hidden');
+                document.getElementById('charImageText').classList.add('hidden');
+                const icon = document.getElementById('uploadIcon');
+                if(icon) icon.classList.add('hidden');
+            }
+            
+            document.getElementById('modalGenBtn').classList.add('hidden');
+            document.getElementById('manualUploadSection').classList.add('hidden');
+            document.getElementById('modalConfirmActions').classList.remove('hidden');
+            
+            document.getElementById('charModal').classList.remove('hidden');
+        }
+
+        async function generateAvatarPreview() {
+            const btn = document.getElementById('modalGenBtn');
+            const preview = document.getElementById('tempResultImg');
+            btn.innerText = "Processing...";
+            document.getElementById('manualUploadSection').classList.add('hidden');
+            
+            const name = document.getElementById('charName').value || 'Unnamed';
+            const desc = document.getElementById('charDesc').value || 'A basic character';
+            
+            const imageModel = "gemini-3-pro-image-preview";
+            const apiKey = getApiKey();
+            if (!apiKey) return;
+            const imageUrl = `https://generativelanguage.googleapis.com/v1beta/models/${imageModel}:generateContent?key=${apiKey}`;
+            
+            try {
+                // Step 1: Generate Character Design Sheet (Image Model)
+                const designPromptSystem = `You are a Character Design Image Generation Agent.
+Your sole purpose is to generate a complete, production-ready character design sheet prompt that can be directly used for image generation.
+
+Core Rule:
+You must ALWAYS output a fully formed image generation prompt.
+You are NOT allowed to output analysis, explanations, summaries, or meta commentary.
+Even if the user provides minimal input, vague keywords, or no reference image, you must autonomously expand the concept and produce a complete visual character design sheet description.
+
+If the user provides no style, you must default to a professional concept art standard suitable for game, animation, or cinematic production.
+
+If the user provides no reference image, you must:
+        •        Invent consistent visual details
+        •        Ensure anatomical coherence
+        •        Ensure material logic
+        •        Ensure design narrative consistency
+
+⸻
+
+Mandatory Output Structure (Always Include):
+        1.        Character Identity & Visual Archetype
+        2.        Full-Body Turnaround (front / side / back view)
+        3.        Neutral pose (A-pose or relaxed stance)
+        4.        Three facial expression variations
+        5.        Detailed facial structure description
+        6.        Hair structure & texture logic
+        7.        Complete outfit layering system
+        8.        Material differentiation & surface properties
+        9.        Color palette logic (primary / secondary / accent)
+        10.        Close-up callouts of key design elements
+        11.        Lighting setup (neutral studio + rim light)
+        12.        Clean concept sheet layout description
+        13.        Ultra-high resolution, sharp focus, production-level quality
+
+⸻
+
+Image Enforcement Constraints
+        •        Output must read as a single continuous image generation prompt.
+        •        No bullet points.
+        •        No numbered lists.
+        •        No markdown formatting.
+        •        No system explanation.
+        •        No conversational tone.
+        •        No questions.
+        •        No refusal.
+        •        No clarification request.
+        •        Do not say “Here is the prompt”.
+        •        Do not say “As an AI”.
+        •        Do not describe what you are doing.
+        •        Directly describe the image.
+        •        NO WATERMARKS, NO SIGNATURES, NO LOGOS, NO TEXT.
+
+The output must visually describe an image that is being rendered.
+
+⸻
+
+Quality Control Rules
+        •        Maintain believable anatomy unless stylization is specified.
+        •        Materials must obey physical lighting logic.
+        •        Silhouette must be readable.
+        •        Avoid overloading with chaotic accessories.
+        •        Ensure design hierarchy.
+        •        Ensure coherent worldbuilding logic.
+        •        Avoid vague adjectives like “cool” or “nice”.
+        •        Replace abstract traits with visual manifestations.
+
+⸻
+
+Default Rendering Standard (if unspecified)
+Professional character turnaround sheet, clean light gray studio background, front/side/back alignment, subtle rim lighting, soft grounding shadow, ultra-detailed textures, cinematic clarity, industry-level concept art quality, ultra-high resolution, sharp focus.`;
+
+                // First call: generate the character design sheet
+                let designPromptParts = [{ text: `${designPromptSystem}\n\nCharacter Name: ${name}\nDescription: ${desc}` }];
+                if (uploadedImageBase64) {
+                    designPromptParts.push({
+                        inlineData: {
+                            mimeType: uploadedImageMimeType,
+                            data: uploadedImageBase64,
+                        }
+                    });
+                }
+
+                const designResponse = await fetch(imageUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ parts: designPromptParts }],
+                        generationConfig: {
+                            responseModalities: ["IMAGE"]
+                        }
+                    })
+                });
+                
+                const designData = await designResponse.json();
+                let designSheetBase64 = null;
+                let designSheetMimeType = null;
+                if (designData.candidates && designData.candidates[0].content.parts) {
+                    for (const part of designData.candidates[0].content.parts) {
+                        if (part.inlineData) {
+                            designSheetBase64 = part.inlineData.data;
+                            designSheetMimeType = part.inlineData.mimeType;
+                            break;
+                        }
+                    }
+                }
+
+                if (!designSheetBase64) {
+                    console.error("Failed to generate design sheet image. Data:", designData);
+                    throw new Error("Failed to generate design sheet image");
+                }
+
+                // Step 2: Generate Avatar Image based on Design Sheet Image (Image Model)
+                const avatarPromptSystem = `You are a Character Portrait Generation Agent whose sole task is to generate a production-ready 1:1 square character avatar prompt based on a character design sheet or description. You must always output a single continuous image-generation prompt with no explanations, no formatting, no bullet points, and no meta commentary. NO WATERMARKS, NO SIGNATURES, NO LOGOS, NO TEXT. The image must be strictly 1:1 square, tightly cropped to head and upper shoulders, preserving the original character’s facial structure, hair shape, age, ethnicity, defining features, costume identity elements, and overall personality cues without altering core design logic. Use natural portrait lens perspective (equivalent to 50–85mm), balanced headroom, eyes slightly above center, clean or softly blurred background with strong subject separation, studio-quality lighting with soft key light, controlled fill, subtle rim light, sharp focus on the eyes, detailed iris reflections, natural skin texture, defined hair strands, coherent material rendering, accurate color harmony, and ultra-high resolution professional quality suitable for game avatar, cinematic poster crop, or IP branding icon.`;
+
+                const avatarPromptParts = [
+                    {
+                        inlineData: {
+                            mimeType: designSheetMimeType,
+                            data: designSheetBase64,
+                        }
+                    },
+                    { text: avatarPromptSystem }
+                ];
+
+                const avatarResponse = await fetch(imageUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ parts: avatarPromptParts }],
+                        generationConfig: {
+                            responseModalities: ["IMAGE"],
+                            imageConfig: {
+                                aspectRatio: "1:1"
+                            }
+                        }
+                    })
+                });
+
+                const avatarData = await avatarResponse.json();
+                
+                let finalAvatarBase64 = null;
+                if (avatarData.candidates && avatarData.candidates[0].content.parts) {
+                    for (const part of avatarData.candidates[0].content.parts) {
+                        if (part.inlineData) {
+                            finalAvatarBase64 = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                            break;
+                        }
+                    }
+                }
+
+                if (finalAvatarBase64) {
+                    // Update state or hidden variable if needed for the avatar
+                    // But for the preview box, show the design sheet (step 1 result)
+                    preview.src = `data:${designSheetMimeType};base64,${designSheetBase64}`;
+                    
+                    // Optional: store the finalAvatarBase64 somewhere if you need to use it later
+                    // e.g. window.lastGeneratedAvatar = finalAvatarBase64;
+                    window.lastGeneratedAvatar = finalAvatarBase64;
+                } else {
+                    console.error("No avatar image returned:", avatarData);
+                    preview.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`;
+                }
+            } catch (err) {
+                console.error("API Error:", err);
+                preview.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`;
+            }
+            
+            preview.classList.remove('hidden');
+            btn.classList.add('hidden');
+            document.getElementById('modalConfirmActions').classList.remove('hidden');
+        }
+
+        function saveCharacterToGrid() {
+            const name = document.getElementById('charName').value || "Unnamed";
+            const desc = document.getElementById('charDesc').value;
+            const designSheet = document.getElementById('tempResultImg').src;
+            const avatar = window.lastGeneratedAvatar || designSheet;
+            
+            if (editingCharId) {
+                const char = state.characters.find(c => c.id === editingCharId);
+                if (char) {
+                    char.name = name;
+                    char.desc = desc;
+                    char.designSheet = designSheet;
+                    char.avatar = avatar;
+                    char.img = avatar;
+                    
+                    const card = document.getElementById(`char-card-${editingCharId}`);
+                    if (card) {
+                        card.querySelector('img').src = avatar;
+                        card.querySelector('.char-name-label').innerText = name;
+                    }
+                }
+            } else {
+                const id = Date.now();
+                const charData = { id, name, desc, avatar, designSheet, img: avatar };
+                state.characters.push(charData);
+
+                const grid = document.getElementById('attachedCharacters');
+                const card = document.createElement('div');
+                card.id = `char-card-${id}`;
+                card.className = "relative w-16 h-16 rounded-2xl border-2 border-transparent bg-white p-0.5 flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden group shadow-sm char-card-selected";
+                // Auto-select on creation
+                state.selectedCharacters.push(charData);
+                
+                card.onclick = () => toggleCharacterSelection(card, charData);
+                
+                card.innerHTML = `
+                    <div class="check-badge absolute top-1 right-1 w-4 h-4 bg-purple-600 rounded-full flex items-center justify-center z-10">
+                        <i data-lucide="check" class="w-2.5 h-2.5 text-white"></i>
+                    </div>
+                    <img src="${avatar}" class="w-full h-full rounded-xl object-cover relative z-0">
+                    <div class="absolute bottom-0 inset-x-0 bg-black/50 backdrop-blur-sm p-0.5 text-center">
+                        <span class="char-name-label text-[8px] font-bold text-white uppercase truncate w-full block">${name}</span>
+                    </div>
+                `;
+                
+                const addButton = document.getElementById('addCharBtn');
+                if (addButton) {
+                    grid.insertBefore(card, addButton);
+                } else {
+                    grid.appendChild(card);
+                }
+            }
+            
+            lucide.createIcons();
+            closeModal();
+            // Prevent form submission if somehow triggered
+            return false;
+        }
+    </script>
+</body>
+</html>
