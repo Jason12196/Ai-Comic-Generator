@@ -1,0 +1,2801 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeShop AI - 漫画工作流</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #FFFFFF; color: #111827; overflow: hidden; }
+        .weshop-shadow { box-shadow: 0 20px 50px rgba(0, 0, 0, 0.06); }
+        .char-dash-box { border: 2px dashed #7C3AED; background-color: #FDFEFE; transition: all 0.3s ease; }
+        
+        /* 选中状态视觉 */
+        .char-card-selected { border: 2px solid #7C3AED !important; background-color: #F5F3FF !important; }
+        .char-card-selected .check-badge { display: flex !important; }
+
+        .modal-overlay { background: rgba(17, 24, 39, 0.4); backdrop-filter: blur(8px); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        /* 故事扩充动画 */
+        .agent-processing { animation: pulse 1.5s infinite; color: #7C3AED; font-weight: 600; }
+        .task-processing { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body class="flex h-screen bg-white">
+
+    <aside class="w-[72px] border-r border-gray-100 flex flex-col items-center shrink-0 bg-white z-50 relative">
+        <div class="py-6 flex items-center justify-center w-full">
+            <div class="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white italic font-bold text-xl cursor-pointer">W</div>
+        </div>
+        <nav class="flex-1 w-full pt-2 flex flex-col items-center gap-4">
+            <a href="#" class="relative flex items-center justify-center w-12 h-12 rounded-xl bg-purple-50 text-purple-600 group">
+                <i data-lucide="pen-tool" class="w-5 h-5"></i>
+                <div class="absolute left-14 bg-gray-900 text-white text-xs px-2.5 py-1.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 font-medium shadow-lg">漫画工作流</div>
+            </a>
+            <a href="#" class="relative flex items-center justify-center w-12 h-12 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-gray-900 group transition-colors">
+                <i data-lucide="compass" class="w-5 h-5"></i>
+                <div class="absolute left-14 bg-gray-900 text-white text-xs px-2.5 py-1.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 font-medium shadow-lg">优秀案例</div>
+            </a>
+        </nav>
+        
+        <div class="pb-6 flex flex-col items-center gap-4">
+            <button class="relative flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors group">
+                <i data-lucide="headphones" class="w-4 h-4"></i>
+                <div class="absolute left-12 bg-gray-900 text-white text-xs px-2.5 py-1.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 font-medium shadow-lg">帮助与客服</div>
+            </button>
+        </div>
+    </aside>
+
+    <!-- 任务列表侧边栏 -->
+    <aside class="w-64 lg:w-72 bg-[#FDFDFD] border-r border-gray-100 flex flex-col shrink-0 z-40 relative">
+        <div class="p-6 border-b border-gray-50">
+            <button onclick="createNewTask()" class="w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-md shadow-purple-200">
+                <i data-lucide="plus" class="w-4 h-4"></i> New Task
+            </button>
+        </div>
+        <div class="px-6 py-4 flex items-center justify-between">
+            <span class="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Recent Tasks</span>
+        </div>
+        <div class="flex-1 overflow-y-auto px-4 pb-6 space-y-2 no-scrollbar" id="taskListContainer">
+            <!-- Dynamic Tasks -->
+            <div id="dynamicTasksContainer" class="space-y-2"></div>
+            
+            <div class="py-4 flex items-center justify-between">
+                <span class="text-[11px] font-bold text-gray-400 uppercase tracking-widest">History Cases</span>
+            </div>
+            <!-- History cases (moved from header) -->
+            <div id="casesListContainer" class="space-y-2">
+                <!-- Cases will be rendered here by JS -->
+            </div>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col bg-[#F9FAFB] relative overflow-hidden">
+        <header class="h-16 shrink-0 flex items-center justify-between px-8 gap-4 border-b border-gray-100 bg-white sticky top-0 z-30">
+            <h1 class="text-lg font-bold text-gray-900">Workspace</h1>
+            
+            <div class="flex items-center gap-6">
+
+                <!-- API Key Input Exposed -->
+                <div class="flex items-center bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 focus-within:border-purple-400 focus-within:ring-2 focus-within:ring-purple-50 transition-all relative">
+                    <i data-lucide="key" class="w-4 h-4 text-gray-400 mr-2"></i>
+                    <input type="password" id="apiKeyInput" placeholder="输入 Gemini API Key..." class="bg-transparent border-none outline-none text-xs w-48 text-gray-700 placeholder-gray-400 pr-6" onblur="testApiKey()">
+                    <div id="apiKeyStatusCheck" class="absolute right-3 hidden">
+                        <i data-lucide="check" class="w-4 h-4 text-green-500"></i>
+                        </div>
+                    <div id="apiKeyStatusError" class="absolute right-3 hidden">
+                        <i data-lucide="x" class="w-4 h-4 text-red-500"></i>
+                    </div>
+                    <div id="apiKeyLoading" class="absolute right-3 hidden">
+                        <i data-lucide="loader-2" class="w-4 h-4 text-gray-400 animate-spin"></i>
+                    </div>
+                    </div>
+                
+                <div class="text-[10px] font-bold text-green-500 bg-green-50 px-2 py-1 rounded-full uppercase tracking-widest">系统就绪</div>
+                <div class="w-8 h-8 rounded-full bg-gray-200"></div>
+                        </div>
+        </header>
+
+        <div class="flex-1 flex overflow-hidden">
+            <!-- Center Canvas Area -->
+            <div class="flex-1 overflow-y-auto relative flex flex-col items-center">
+                <!-- Welcome State -->
+                <div id="welcomeState" class="w-full max-w-4xl px-8 py-20 text-center">
+                    <h2 class="text-3xl font-bold text-gray-900 mb-4">开始您的 AI 漫画创作</h2>
+                    <p class="text-gray-500 text-sm mb-10">在右侧面板配置角色、故事及参数，一键生成高质量分镜</p>
+                    <div class="mt-4 flex items-center justify-center gap-4">
+                        <button onclick="clearHistory()" class="text-xs font-bold text-gray-400 hover:text-red-500 transition-colors flex items-center gap-1.5">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i> 清除历史记录
+                        </button>
+                        <span class="text-gray-300">|</span>
+                        <button onclick="saveAsCase()" class="text-xs font-bold text-gray-400 hover:text-purple-600 transition-colors flex items-center gap-1.5">
+                            <i data-lucide="star" class="w-4 h-4"></i> 保存为优秀案例
+                        </button>
+                        <span class="text-gray-300">|</span>
+                        <button onclick="toggleInputHeight()" class="text-xs font-bold text-purple-600 hover:text-purple-700 transition-colors flex items-center gap-1.5 bg-purple-50 px-3 py-1.5 rounded-lg">
+                            <i data-lucide="edit-3" class="w-4 h-4"></i> 开始创作
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Expanded Story (Hidden by default) -->
+                <div id="expandedStoryBox" class="hidden w-full max-w-4xl px-8 mt-8 mb-4">
+                    <div class="p-5 bg-purple-50/30 border border-purple-100 rounded-2xl animate-in fade-in">
+                        <div class="flex items-center gap-2 mb-4 text-purple-600">
+                            <i data-lucide="wand-2" class="w-4 h-4"></i>
+                            <span class="text-[11px] font-bold uppercase">AI 结构化故事大纲</span>
+                        </div>
+                        <div id="expandedContent"></div>
+                    </div>
+                </div>
+
+                <!-- 最终生成的漫画展示区 -->
+                <div id="comicResultBox" class="hidden w-full max-w-6xl px-8 pb-20 mt-4 flex-col items-center">
+                    <div class="flex justify-between items-center w-full mb-8">
+                        <h3 class="text-xl font-bold text-gray-900">最终成片</h3>
+                        <div id="comicGenProgress" class="flex items-center gap-4 hidden">
+                            <div class="w-64 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div id="progressBar" class="h-full bg-purple-600 w-0 transition-all duration-300"></div>
+                            </div>
+                            <span id="progressText" class="text-xs font-bold text-purple-600 uppercase w-24">生成中 0/4...</span>
+                        </div>
+                        <div class="flex gap-3">
+                            <button type="button" id="downloadZipBtn" onclick="downloadAllPanels()" class="hidden bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm">
+                                <i data-lucide="folder-down" class="w-4 h-4"></i> 下载全部
+                            </button>
+                            <button type="button" id="downloadFullComicBtn" onclick="downloadFullComic()" class="hidden bg-black hover:bg-gray-800 text-white px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm">
+                                <i data-lucide="image" class="w-4 h-4"></i> 导出长图
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="executionsContainer" class="w-full mb-6 flex flex-col gap-2">
+                        <!-- Executions list rendered here -->
+                    </div>
+                    
+                    <div id="comicWrapper" class="w-full relative hidden flex justify-center">
+                        <div id="comicGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 w-full max-w-full">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Floating Input Box -->
+            <div id="floatingInputBox" class="absolute bottom-8 left-1/2 transform -translate-x-1/2 w-full max-w-4xl z-50 bg-white/95 backdrop-blur shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 rounded-[32px] flex flex-col transition-all duration-300">
+                <!-- 顶部：文本输入区 -->
+                <div class="relative p-6 pb-2">
+                    <textarea id="storyInput" class="w-full h-12 bg-transparent border-none p-0 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0 resize-none transition-all duration-300 scrollbar-hide" placeholder="Describe what you want to generate..."></textarea>
+                    <button type="button" onclick="toggleInputHeight()" class="absolute top-6 right-6 text-gray-400 hover:text-purple-600 transition-colors bg-white/80 rounded p-1">
+                        <i data-lucide="maximize-2" id="expandIcon" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <!-- 中部：角色列表 -->
+                <div class="px-6 py-2 flex gap-3 flex-wrap items-center min-h-[48px]" id="attachedCharacters">
+                    <button type="button" id="addCharBtn" onclick="openModal()" class="w-10 h-10 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-purple-600 transition-colors shrink-0">
+                        <i data-lucide="plus" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <!-- 底部：操作选项栏 -->
+                <div class="px-6 py-4 flex items-center justify-between border-t border-gray-100/50">
+                    <div class="flex items-center gap-3">
+                        <!-- 设置图标 -->
+                        <button type="button" class="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-50 rounded-xl relative" onclick="toggleDropdown('settingsDropdown')">
+                            <i data-lucide="settings-2" class="w-4 h-4"></i>
+                        </button>
+                        
+                        <!-- 设置下拉菜单 (包含画风、模型) -->
+                        <div class="relative" id="settingsDropdownContainer">
+                            <div id="settingsDropdown" class="hidden absolute bottom-[120%] left-0 mb-2 w-64 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 p-4 z-[60] origin-bottom-left animate-in fade-in zoom-in-95 duration-200">
+                                <div class="space-y-4">
+                                <div class="flex flex-col gap-2">
+                                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">画面风格</span>
+                                    <div class="relative w-full" id="styleDropdownInnerContainer">
+                                        <button type="button" class="flex items-center justify-between w-full px-3 py-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-xs font-bold text-gray-700 transition-colors" onclick="toggleDropdown('styleDropdown')">
+                                            <span id="styleBtnText" class="truncate">自动匹配画风</span>
+                                            <i data-lucide="chevron-down" class="w-3.5 h-3.5 shrink-0"></i>
+                                        </button>
+                                        <div id="styleDropdown" class="hidden absolute top-0 left-full ml-1 w-full bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 py-2 z-[70] animate-in fade-in zoom-in-95 duration-200 max-h-48 overflow-y-auto">
+                                            <button type="button" onclick="selectStyle('auto', '自动匹配画风')" class="w-full text-left px-4 py-2 text-xs text-purple-600 bg-purple-50 font-bold">自动根据故事匹配</button>
+                                            <button type="button" onclick="selectStyle('Japanese manga style, clean linework, cel shading, detailed backgrounds', '日系漫画')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">日系漫画</button>
+                                            <button type="button" onclick="selectStyle('Western superhero comic style, dynamic inking, vibrant colors', '美式超级英雄')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">美式超级英雄</button>
+                                            <button type="button" onclick="selectStyle('Gritty noir graphic novel style, high contrast black and white, heavy shadows', '黑色电影图画小说')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">黑色电影图画小说</button>
+                                            <button type="button" onclick="selectStyle('Moebius style European comic, surreal colors, thin delicate lines', '欧式科幻')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">欧式科幻</button>
+                                            <button type="button" onclick="selectStyle('Cinematic concept art style, painterly, realistic lighting', '电影概念艺术')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">电影概念艺术</button>
+                                            <div class="h-px bg-gray-100 my-1"></div>
+                                            <button type="button" onclick="openCustomStyleModal()" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600 flex items-center gap-2">
+                                                <i data-lucide="plus" class="w-3 h-3"></i> 自定义画风...
+                                            </button>
+                                        </div>
+                                        <select id="artStyleSelect" class="hidden">
+                                            <option value="auto" selected>自动根据故事匹配</option>
+                                            <option value="Japanese manga style, clean linework, cel shading, detailed backgrounds">日系漫画</option>
+                                            <option value="Western superhero comic style, dynamic inking, vibrant colors">美式超级英雄</option>
+                                            <option value="Gritty noir graphic novel style, high contrast black and white, heavy shadows">黑色电影图画小说</option>
+                                            <option value="Moebius style European comic, surreal colors, thin delicate lines">欧式科幻</option>
+                                            <option value="Cinematic concept art style, painterly, realistic lighting">电影概念艺术</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex flex-col gap-2">
+                                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">模型选择</span>
+                                    <div class="relative w-full" id="modelDropdownInnerContainer">
+                                        <button type="button" class="flex items-center justify-between w-full px-3 py-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-xs font-bold text-gray-700 transition-colors" onclick="toggleDropdown('modelDropdown')">
+                                            <span id="modelBtnText" class="truncate">Nano 2</span>
+                                            <i data-lucide="chevron-down" class="w-3.5 h-3.5 shrink-0"></i>
+                                        </button>
+                                        <div id="modelDropdown" class="hidden absolute top-0 left-full ml-1 w-full bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 py-2 z-[70] animate-in fade-in zoom-in-95 duration-200">
+                                            <button type="button" onclick="selectModel('gemini-3.1-flash-image-preview', 'Nano 2')" class="w-full text-left px-4 py-2 text-xs text-purple-600 bg-purple-50 font-bold">Nano 2</button>
+                                            <button type="button" onclick="selectModel('gemini-3-pro-image-preview', 'Nano pro')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">Nano pro</button>
+                                        </div>
+                                        <select id="imageModelSelect" class="hidden">
+                                            <option value="gemini-3.1-flash-image-preview" selected>Nano 2</option>
+                                            <option value="gemini-3-pro-image-preview">Nano pro</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        </div>
+                        
+                        <!-- 比例选择 -->
+                        <div class="relative" id="ratioDropdownContainer">
+                            <button type="button" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-xs font-bold text-gray-600 transition-colors" onclick="toggleDropdown('ratioDropdown')">
+                                <i data-lucide="monitor" class="w-3.5 h-3.5"></i>
+                                <span id="ratioBtnText">16:9</span>
+                            </button>
+                            <div id="ratioDropdown" class="hidden absolute bottom-full left-0 mb-2 w-36 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 py-2 z-50 origin-bottom-left animate-in fade-in zoom-in-95 duration-200">
+                                <button type="button" onclick="selectRatio('1:1')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">1:1 正方形</button>
+                                <button type="button" onclick="selectRatio('3:4')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">3:4 标准</button>
+                                <button type="button" onclick="selectRatio('9:16')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">9:16 条漫</button>
+                                <button type="button" onclick="selectRatio('16:9')" class="w-full text-left px-4 py-2 text-xs text-purple-600 bg-purple-50 font-bold">16:9 电影</button>
+                            </div>
+                            <select id="aspectRatioSelect" class="hidden">
+                                <option value="1:1">1:1 正方形</option>
+                                <option value="3:4">3:4 标准</option>
+                                <option value="9:16">9:16 条漫</option>
+                                <option value="16:9" selected>16:9 电影</option>
+                            </select>
+                        </div>
+
+                        <!-- 页数选择 -->
+                        <div class="relative" id="pageDropdownContainer">
+                            <button type="button" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-xs font-bold text-gray-600 transition-colors" onclick="toggleDropdown('pageDropdown')">
+                                <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+                                <span id="pageBtnText">x1</span>
+                            </button>
+                            <div id="pageDropdown" class="hidden absolute bottom-full left-0 mb-2 w-32 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 py-2 z-50 origin-bottom-left animate-in fade-in zoom-in-95 duration-200">
+                                <button type="button" onclick="selectPage('1')" class="w-full text-left px-4 py-2 text-xs text-purple-600 bg-purple-50 font-bold">1 页</button>
+                                <button type="button" onclick="selectPage('2')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">2 页</button>
+                                <button type="button" onclick="selectPage('5')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">5 页</button>
+                                <button type="button" onclick="selectPage('10')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">10 页</button>
+                            </div>
+                            <select id="pageSelect" class="hidden">
+                                <option value="1" selected>1 页</option>
+                                <option value="2">2 页</option>
+                                <option value="5">5 页</option>
+                                <option value="10">10 页</option>
+                            </select>
+                        </div>
+
+                        <!-- AI 扩写开关 -->
+                        <label class="flex items-center gap-2 cursor-pointer ml-2">
+                            <div class="relative">
+                                <input type="checkbox" id="enableExpansion" checked class="sr-only" onchange="toggleExpansionVisual(this)">
+                                <div class="block bg-purple-600 w-8 h-5 rounded-full transition-colors duration-300" id="expansionToggleBg"></div>
+                                <div class="dot absolute left-1 top-1 bg-white w-3 h-3 rounded-full transition-transform duration-300 translate-x-3" id="expansionToggleDot"></div>
+                            </div>
+                            <span class="text-xs font-bold text-gray-500">AI 扩写</span>
+                        </label>
+                    </div>
+                    
+                    <div class="flex items-center gap-3">
+                        <div id="agentStatus" class="text-[11px] font-bold text-purple-600 hidden mr-2">处理中...</div>
+                        
+                        <!-- 一键生成按钮 -->
+                        <button type="button" id="oneClickGenerateBtn" onclick="handleOneClickGenerate()" class="bg-[#7C3AED] hover:bg-[#6D28D9] text-white px-6 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-200 text-sm shrink-0">
+                            <span>Generate</span>
+                            <i data-lucide="sparkles" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Custom Style Modal -->
+    <div id="customStyleModal" class="fixed inset-0 modal-overlay z-[60] flex items-center justify-center hidden">
+        <div class="bg-white w-[600px] rounded-[24px] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            <div class="p-5 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
+                <h3 class="text-sm font-bold text-gray-900">自定义画风</h3>
+                <button type="button" onclick="closeCustomStyleModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div class="p-6">
+                <div class="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-2xl p-2 focus-within:ring-2 focus-within:ring-purple-100 transition-all">
+                    <input type="text" id="customStyleText" class="flex-1 bg-transparent border-none text-sm text-gray-800 focus:outline-none px-3 py-2" placeholder="描述你的画风，例如: 水彩风格，柔和的色彩，绘本插画感...">
+                    <div class="shrink-0 relative">
+                        <button type="button" onclick="document.getElementById('customStyleImage').click()" class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:text-purple-600 hover:border-purple-200 transition-colors shadow-sm group">
+                            <i data-lucide="image-plus" class="w-5 h-5"></i>
+                        </button>
+                        <input type="file" id="customStyleImage" accept="image/*" class="hidden" onchange="handleCustomStyleImage(event)">
+                        <div id="customStylePreviewContainer" class="hidden absolute top-0 right-0 w-10 h-10 rounded-xl overflow-hidden shadow-md">
+                            <img id="customStylePreview" class="w-full h-full object-cover">
+                            <button type="button" id="removeCustomStyleImgBtn" onclick="removeCustomStyleImage(event)" class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="px-6 py-4 flex justify-end gap-3 shrink-0">
+                <button type="button" onclick="closeCustomStyleModal()" class="px-5 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-100 transition-colors">取消</button>
+                <button type="button" onclick="saveCustomStyle()" class="bg-[#7C3AED] hover:bg-[#6D28D9] text-white px-6 py-2 rounded-xl font-bold transition-all shadow-md shadow-purple-200 text-xs">
+                    保存并应用
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Comic Viewer Overlay (From Chat Mode) -->
+    <div id="comicViewerOverlay" class="fixed inset-0 bg-white z-[100] hidden flex">
+        <!-- Left Side: Comic Viewer -->
+        <div class="flex-1 bg-gray-50 h-full flex flex-col relative">
+            <div class="h-16 flex items-center px-6 border-b border-gray-200 bg-white shrink-0 justify-between">
+                <div class="font-bold text-lg">Final Comic</div>
+                <div class="flex gap-2">
+                    <button onclick="downloadCurrentPage()" class="text-xs bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl font-bold hover:bg-gray-50 transition-colors flex items-center gap-2">
+                        <i data-lucide="download" class="w-4 h-4"></i> Download Page
+                    </button>
+                    <button onclick="downloadAllPages()" class="text-xs bg-purple-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-purple-700 transition-colors flex items-center gap-2">
+                        <i data-lucide="download-cloud" class="w-4 h-4"></i> Download All (ZIP)
+                    </button>
+                    <button onclick="closeComicViewer()" class="ml-4 text-gray-400 hover:text-gray-800 transition-colors">
+                        <i data-lucide="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="flex-1 overflow-auto flex items-center justify-center p-8 relative group" id="comicViewerCanvas">
+                <!-- Image goes here -->
+                <img id="comicViewerImg" src="" class="max-w-full max-h-full object-contain shadow-2xl transition-opacity duration-300">
+                <!-- Navigation -->
+                <button onclick="prevComicPage()" id="prevPageBtn" class="absolute left-8 w-12 h-12 rounded-full bg-white/80 backdrop-blur shadow-lg flex items-center justify-center text-gray-800 hover:bg-white transition-all disabled:opacity-0 hidden group-hover:flex">
+                    <i data-lucide="chevron-left" class="w-6 h-6"></i>
+                </button>
+                <button onclick="nextComicPage()" id="nextPageBtn" class="absolute right-8 w-12 h-12 rounded-full bg-white/80 backdrop-blur shadow-lg flex items-center justify-center text-gray-800 hover:bg-white transition-all disabled:opacity-0 hidden group-hover:flex">
+                    <i data-lucide="chevron-right" class="w-6 h-6"></i>
+                </button>
+            </div>
+            <div class="h-14 flex items-center justify-center text-sm font-bold text-gray-500 gap-2 shrink-0 bg-white border-t border-gray-200">
+                <span id="comicPageIndicator">第 1 / 5 页</span>
+            </div>
+        </div>
+        <!-- Right Side: Info & Regen -->
+        <div class="w-[400px] bg-white border-l border-gray-200 flex flex-col shadow-xl z-10 h-full relative">
+            <div class="p-6 border-b border-gray-100 flex-1 overflow-y-auto">
+                <h3 class="font-bold text-gray-900 mb-6 flex items-center justify-between">
+                    单页剧本与设定
+                </h3>
+                <div class="space-y-5">
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-400 uppercase mb-2 block">画面动作与环境</label>
+                        <textarea id="viewerPageStory" class="w-full bg-gray-50 border border-gray-100 rounded-xl p-4 text-sm text-gray-700 h-32 resize-none focus:outline-none focus:border-purple-300 transition-colors"></textarea>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-400 uppercase mb-2 block">对话内容</label>
+                        <textarea id="viewerPageDialogue" class="w-full bg-gray-50 border border-gray-100 rounded-xl p-4 text-sm text-gray-700 h-24 resize-none focus:outline-none focus:border-purple-300 transition-colors"></textarea>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-400 uppercase mb-2 block">排版逻辑</label>
+                        <textarea id="viewerPageLayout" class="w-full bg-gray-50 border border-gray-100 rounded-xl p-4 text-sm text-gray-700 h-24 resize-none focus:outline-none focus:border-purple-300 transition-colors"></textarea>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-400 uppercase mb-2 block">分格数量</label>
+                        <input type="number" id="viewerPagePanelCount" min="1" max="6" class="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-sm text-gray-700 focus:outline-none focus:border-purple-300 transition-colors">
+                    </div>
+                </div>
+            </div>
+            <div class="p-6 bg-gray-50 border-t border-gray-200 shrink-0">
+                <button onclick="regenerateCurrentPage()" id="viewerRegenBtn" class="w-full bg-[#111827] hover:bg-[#1f2937] text-white py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-gray-200 disabled:opacity-50">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i> 重新生成此页
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="charModal" class="fixed inset-0 modal-overlay z-50 flex items-center justify-center hidden">
+        <div class="bg-white w-[800px] rounded-[32px] shadow-2xl overflow-hidden flex flex-col">
+            <div class="p-6 border-b border-gray-50 flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <h3 class="text-lg font-bold">设定角色</h3>
+                    <div id="charModalNav" class="hidden flex items-center gap-2">
+                        <button onclick="prevCharacter()" class="w-8 h-8 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-600 transition-colors"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                        <span id="charModalCounter" class="text-xs font-bold text-gray-400">1 / 3</span>
+                        <button onclick="nextCharacter()" class="w-8 h-8 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-600 transition-colors"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+                    </div>
+                </div>
+                <button type="button" onclick="closeModal()" class="text-gray-400"><i data-lucide="x"></i></button>
+            </div>
+            <div class="flex h-[450px]">
+                <div class="w-1/2 p-8 space-y-3 overflow-y-auto no-scrollbar">
+                    <input id="charName" type="text" class="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="名称">
+                    <div class="flex gap-2">
+                        <input id="charAge" type="text" class="w-1/3 bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="年龄">
+                        <input id="charGender" type="text" class="w-1/3 bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="性别">
+                        <input id="charSpecies" type="text" class="w-1/3 bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="物种">
+                    </div>
+                    <textarea id="charOtherTraits" class="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-sm h-24 outline-none resize-none" placeholder="其他特征/外貌描述..."></textarea>
+                    <div class="relative h-24 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center text-gray-400 text-xs hover:bg-gray-50 transition-colors group">
+                        <div class="absolute inset-0 flex flex-col items-center justify-center cursor-pointer" onclick="document.getElementById('charImage').click()">
+                            <i data-lucide="upload" class="w-6 h-6 mb-2 text-gray-400" id="uploadIcon"></i>
+                            <span id="charImageText">上传参考图 (可选)</span>
+                        </div>
+                        <input type="file" id="charImage" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+                        <img id="charImagePreview" class="absolute inset-0 w-full h-full object-cover rounded-xl hidden pointer-events-none">
+                        <button type="button" id="clearCharImageBtn" onclick="clearCharImage(event)" class="absolute top-1 right-1 w-6 h-6 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center text-white hidden z-10">
+                            <i data-lucide="x" class="w-3 h-3"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="w-1/2 p-8 bg-gray-50/50 flex flex-col">
+                    <div id="previewBox" class="flex-1 bg-white rounded-2xl border border-gray-100 mb-4 flex items-center justify-center overflow-hidden">
+                        <i data-lucide="image" class="text-gray-200 w-12 h-12"></i>
+                        <img id="tempResultImg" class="hidden w-full h-full object-cover">
+                    </div>
+                    <button type="button" id="modalGenBtn" onclick="generateAvatarPreview()" class="w-full bg-purple-600 text-white py-3 rounded-xl text-xs font-bold">生成角色设定图</button>
+                    <div id="manualUploadSection" class="mt-4">
+                        <div class="flex items-center justify-between text-xs text-gray-400 mb-3">
+                            <span class="h-px bg-gray-200 flex-1"></span>
+                            <span class="px-2">或者</span>
+                            <span class="h-px bg-gray-200 flex-1"></span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="button" onclick="document.getElementById('manualDesignUpload').click()" class="w-full bg-white border border-gray-200 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50">上传设计图</button>
+                        </div>
+                        <input type="file" id="manualDesignUpload" accept="image/*" class="hidden" onchange="handleManualDesign(event)">
+                    </div>
+                    <div id="modalConfirmActions" class="hidden flex gap-2 mt-4">
+                        <button type="button" id="modalDeleteBtn" onclick="deleteCharacter()" class="hidden flex-1 bg-red-50 text-red-600 border border-red-100 py-3 rounded-xl text-xs font-bold hover:bg-red-100">删除角色</button>
+                        <button type="button" id="modalRegenBtn" onclick="generateAvatarPreview()" class="flex-1 bg-white border border-gray-200 py-3 rounded-xl text-xs font-bold">重新生成</button>
+                        <button type="button" onclick="saveCharacterToGrid()" class="flex-1 bg-black text-white py-3 rounded-xl text-xs font-bold">保存角色</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // --- 数据状态管理 ---
+        let state = {
+            tasks: [],
+            currentTaskId: null,
+            characters: [], 
+            selectedCharacters: [], 
+            pages: 5,
+            ratio: "3:4",
+            originalStory: "",
+            expandedStory: "",
+            generatedComicPages: null,
+            hasGeneratedOnce: false,
+            executions: [],
+            currentExecutionId: null
+        };
+        let editingCharId = null;
+        let editingCharIndex = -1;
+        let isReviewingCharacters = false;
+        let pendingStoryboardJson = null;
+
+        let customStyleImageBase64 = null;
+        let customStyleImageMimeType = null;
+
+
+        function handleCustomStyleImage(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const base64String = e.target.result;
+                    customStyleImageBase64 = base64String.split(',')[1];
+                    customStyleImageMimeType = file.type;
+                    
+                    const preview = document.getElementById('customStylePreview');
+                    preview.src = base64String;
+                    document.getElementById('customStylePreviewContainer').classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function removeCustomStyleImage(event) {
+            if (event) {
+                event.stopPropagation();
+                event.preventDefault();
+            }
+            customStyleImageBase64 = null;
+            customStyleImageMimeType = null;
+            document.getElementById('customStyleImage').value = '';
+            document.getElementById('customStylePreview').src = '';
+            document.getElementById('customStylePreviewContainer').classList.add('hidden');
+        }
+
+        // Auto Load State
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedApiKey = localStorage.getItem('geminiApiKey');
+            if (savedApiKey) {
+                document.getElementById('apiKeyInput').value = savedApiKey;
+                testApiKey(); // Validate it
+            }
+
+            renderCases();
+
+            const savedState = localStorage.getItem('aiComicState');
+            let hasLoadedTasks = false;
+            
+            if (savedState) {
+                try {
+                    const parsedState = JSON.parse(savedState);
+                    if (parsedState.tasks && parsedState.tasks.length > 0) {
+                        state.tasks = parsedState.tasks;
+                        state.currentTaskId = parsedState.currentTaskId || parsedState.tasks[0].id;
+                        switchTask(state.currentTaskId);
+                        hasLoadedTasks = true;
+                    } else {
+                        // Migration from old state format
+                        const legacyTask = {
+                            id: Date.now().toString(),
+                            title: "Legacy Task",
+                            createdAt: new Date().toLocaleString(),
+                            hasGeneratedOnce: false,
+                            executions: [],
+                            characters: parsedState.characters || [],
+                            selectedCharacters: parsedState.selectedCharacters || [],
+                            pages: parsedState.pages || "5",
+                            ratio: parsedState.ratio || "3:4",
+                            style: parsedState.style || "auto",
+                            originalStory: parsedState.originalStory || "",
+                            expandedStory: parsedState.expandedStory || "",
+                            generatedComicPages: parsedState.generatedComicPages || null
+                        };
+                        state.tasks.push(legacyTask);
+                        state.currentTaskId = legacyTask.id;
+                        switchTask(legacyTask.id);
+                        hasLoadedTasks = true;
+                    }
+                } catch(e) {
+                    console.log("Failed to restore state", e);
+                }
+            }
+            
+            if (!hasLoadedTasks) {
+                // Initialize default task
+                createNewTask();
+            }
+        });
+
+        function saveStateToLocal() {
+            try {
+                saveCurrentTask();
+                
+                const attemptSave = (tasksToSave) => {
+                    localStorage.setItem('aiComicState', JSON.stringify({
+                        tasks: tasksToSave,
+                        currentTaskId: state.currentTaskId
+                    }));
+                };
+                
+                // First attempt: Strip only executions
+                let strippedTasks = state.tasks.map(t => ({
+                    ...t,
+                    executions: [], 
+                    generatedComicPages: null
+                }));
+                
+                try {
+                    attemptSave(strippedTasks);
+                } catch(e) {
+                    if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.message.includes('quota')) {
+                        console.warn("Storage quota exceeded, aggressively stripping old task images...");
+                        // Second attempt: Strip images from non-current tasks
+                        strippedTasks = state.tasks.map(t => ({
+                            ...t,
+                            executions: [],
+                            generatedComicPages: null,
+                            characters: t.id === state.currentTaskId ? t.characters : t.characters.map(c => ({...c, avatar: null, designSheet: null, img: null})),
+                            selectedCharacters: t.id === state.currentTaskId ? t.selectedCharacters : t.selectedCharacters.map(c => ({...c, avatar: null, designSheet: null, img: null}))
+                        }));
+                        
+                        // We also need to clear state.characters and state.selectedCharacters global images if they are huge
+                        // For the global state itself, since we only save tasks and currentTaskId, we don't need to touch globals here.
+                        
+                        try {
+                            attemptSave(strippedTasks);
+                        } catch (e2) {
+                            console.warn("Storage quota STILL exceeded, stripping ALL images...");
+                            // Third attempt: Strip ALL images to at least save the story/text
+                            strippedTasks = state.tasks.map(t => ({
+                                ...t,
+                                executions: [],
+                                generatedComicPages: null,
+                                characters: t.characters.map(c => ({...c, avatar: null, designSheet: null, img: null})),
+                                selectedCharacters: t.selectedCharacters.map(c => ({...c, avatar: null, designSheet: null, img: null}))
+                            }));
+                            attemptSave(strippedTasks);
+                        }
+                    } else {
+                        throw e;
+                    }
+                }
+            } catch(e) {
+                console.warn("Could not save state completely", e);
+            }
+        }
+
+        // Save on change
+        document.getElementById('storyInput').addEventListener('input', saveStateToLocal);
+        document.getElementById('artStyleSelect').addEventListener('change', saveStateToLocal);
+        document.getElementById('aspectRatioSelect').addEventListener('change', saveStateToLocal);
+        document.getElementById('pageSelect').addEventListener('change', saveStateToLocal);
+
+        function clearHistory() {
+            if (confirm("确定要清除所有历史记录（包括已保存的角色和漫画）吗？")) {
+                localStorage.removeItem('aiComicState');
+                location.reload();
+            }
+        }
+        
+        function saveAsCase() {
+            const story = document.getElementById('storyInput').value.trim();
+            if (!story) {
+                alert("当前没有可保存的故事内容！");
+                return;
+            }
+            
+            // Generate a random seed for the icon
+            const seeds = ["adventure", "cyber", "magic", "space", "fantasy", "hero", "mystery"];
+            const randomSeed = seeds[Math.floor(Math.random() * seeds.length)] + Date.now();
+            
+            // Extract a short title (first 8 chars or up to the first punctuation)
+            let shortTitle = story.split(/[,.，。！?！\n]/)[0].substring(0, 10);
+            if (shortTitle.length === 0) shortTitle = "新灵感案例";
+            else shortTitle += "...";
+
+            // Get current state to save as a case
+            const style = document.getElementById('artStyleSelect').value;
+            const ratio = document.getElementById('aspectRatioSelect').value;
+            const pages = document.getElementById('pageSelect').value;
+            
+            const newCase = {
+                id: Date.now(),
+                title: shortTitle,
+                seed: randomSeed,
+                state: {
+                    originalStory: story,
+                    ratio,
+                    pages,
+                    style,
+                    characters: state.characters,
+                    selectedCharacters: state.selectedCharacters
+                    // Not saving the generated images to save localstorage space for cases
+                }
+            };
+            
+            // Get existing cases
+            let savedCases = [];
+            try {
+                const existing = localStorage.getItem('aiComicCases');
+                if (existing) savedCases = JSON.parse(existing);
+            } catch(e) {}
+            
+            savedCases.unshift(newCase); // add to front
+            localStorage.setItem('aiComicCases', JSON.stringify(savedCases));
+            
+            // Re-render cases
+            renderCases();
+            alert("已成功保存至灵感库！");
+        }
+
+        function renderCases() {
+            const casesContainer = document.getElementById('casesListContainer');
+            if (!casesContainer) return;
+            
+            let savedCases = [];
+            try {
+                const existing = localStorage.getItem('aiComicCases');
+                if (existing) savedCases = JSON.parse(existing);
+            } catch(e) {}
+            
+            // Build default hardcoded cases plus dynamic ones
+            let html = '';
+            
+            const allCases = [
+                ...savedCases.map(c => ({...c, isCustom: true})),
+                { title: "赛博朋克城市", seed: "cyber", isCustom: false },
+                { title: "魔法学院日常", seed: "magic", isCustom: false },
+                { title: "太空探险队", seed: "space", isCustom: false }
+            ];
+            
+            allCases.forEach(c => {
+                const caseDataStr = c.isCustom ? encodeURIComponent(JSON.stringify(c.state)) : '';
+                
+                html += `
+                    <div ${c.isCustom ? `onclick="loadCase('${caseDataStr}')"` : 'onclick="alert(\'默认案例暂未配置详细数据\')"' } class="p-4 rounded-xl bg-white border border-gray-100 hover:border-purple-200 hover:shadow-md transition-all cursor-pointer group">
+                        <div class="flex items-center gap-3">
+                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${c.seed}" class="w-10 h-10 rounded-lg border border-gray-100 bg-gray-50 object-cover">
+                            <div class="flex-1 min-w-0">
+                                <h4 class="text-sm font-bold text-gray-900 truncate group-hover:text-purple-600 transition-colors">${c.title}</h4>
+                                <p class="text-[11px] text-gray-400 font-medium">Completed</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            casesContainer.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        function loadCase(encodedState) {
+            if (!confirm("加载案例将覆盖当前的输入与参数，确定要加载吗？")) return;
+            
+            try {
+                const decodedState = JSON.parse(decodeURIComponent(encodedState));
+                
+                // Clear current
+                state.characters = [];
+                state.selectedCharacters = [];
+                state.executions = [];
+                state.hasGeneratedOnce = false;
+                state.generatedComicPages = null;
+                window.generatedComicPages = null;
+                document.getElementById('attachedCharacters').innerHTML = `
+                    <button type="button" id="addCharBtn" onclick="openModal()" class="w-10 h-10 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-purple-600 transition-colors shrink-0">
+                        <i data-lucide="plus" class="w-5 h-5"></i>
+                    </button>
+                `;
+                document.getElementById('comicResultBox').classList.add('hidden');
+                document.getElementById('expandedStoryBox').classList.add('hidden');
+                
+                // Restore inputs
+                if (decodedState.originalStory) document.getElementById('storyInput').value = decodedState.originalStory;
+                if (decodedState.ratio) document.getElementById('aspectRatioSelect').value = decodedState.ratio;
+                if (decodedState.pages) document.getElementById('pageSelect').value = decodedState.pages;
+                if (decodedState.style) {
+                    const styleSelect = document.getElementById('artStyleSelect');
+                    let styleExists = Array.from(styleSelect.options).some(opt => opt.value === decodedState.style);
+                    if (!styleExists && decodedState.style !== "auto") {
+                        const option = document.createElement('option');
+                        option.value = decodedState.style;
+                        option.text = "自定义画风";
+                        styleSelect.appendChild(option);
+                    }
+                    styleSelect.value = decodedState.style;
+                }
+                
+                syncDropdownUI();
+
+                // Restore characters if any
+                if (decodedState.characters && decodedState.characters.length > 0) {
+                    decodedState.characters.forEach(char => {
+                        if (char.avatar) {
+                            state.characters.push(char);
+                            const isSelected = decodedState.selectedCharacters && decodedState.selectedCharacters.some(c => c.id === char.id);
+                            renderCharacterCard(char, isSelected);
+                        }
+                    });
+                    
+                    if (decodedState.selectedCharacters) {
+                        state.selectedCharacters = decodedState.selectedCharacters;
+                    }
+                }
+                
+                const btn = document.getElementById('oneClickGenerateBtn');
+                btn.innerHTML = `<span>一键生成漫画</span><i data-lucide="sparkles" class="w-4 h-4"></i>`;
+                
+                renderExecutions();
+                saveStateToLocal();
+                lucide.createIcons();
+                
+            } catch(e) {
+                console.error("加载案例失败", e);
+                alert("加载案例失败");
+            }
+        }
+
+        // --- 角色选择逻辑 ---
+        function toggleCharacterSelection(element, charData) {
+            const isSelected = element.classList.toggle('char-card-selected');
+            if (isSelected) {
+                if (!state.selectedCharacters.find(c => c.id === charData.id)) {
+                state.selectedCharacters.push(charData);
+                }
+                element.querySelector('.check-badge').style.display = 'flex';
+            } else {
+                state.selectedCharacters = state.selectedCharacters.filter(c => c.id !== charData.id);
+                element.querySelector('.check-badge').style.display = 'none';
+            }
+            saveStateToLocal();
+        }
+
+        function renderCharacterCard(charData, forceSelected = false) {
+            const grid = document.getElementById('attachedCharacters');
+            // Check if already exists
+            if (document.getElementById(`char-card-${charData.id}`)) return;
+
+            const card = document.createElement('div');
+            card.id = `char-card-${charData.id}`;
+            // If it's already in selected characters array from restore, make sure it's visually selected
+            const isSelected = forceSelected || state.selectedCharacters.find(c => c.id === charData.id);
+            card.className = `relative w-10 h-10 rounded-full border-2 border-transparent bg-white p-0.5 flex flex-col items-center justify-center cursor-pointer transition-all overflow-visible group shadow-sm shrink-0 ${isSelected ? 'char-card-selected' : ''}`;
+            
+            card.onclick = () => toggleCharacterSelection(card, charData);
+            
+            card.innerHTML = `
+                <button type="button" class="edit-btn absolute -top-1 -left-1 w-4 h-4 bg-white/90 backdrop-blur rounded-full hidden group-hover:flex items-center justify-center hover:bg-white z-20 shadow-sm" onclick="editCharacter(event, ${charData.id})">
+                    <i data-lucide="edit-2" class="w-2.5 h-2.5 text-gray-600"></i>
+                </button>
+                <div class="check-badge absolute -top-1 -right-1 w-3.5 h-3.5 bg-purple-600 rounded-full flex items-center justify-center z-10" ${isSelected ? 'style="display: flex;"' : 'style="display: none;"'}>
+                    <i data-lucide="check" class="w-2.5 h-2.5 text-white"></i>
+                </div>
+                <img src="${charData.avatar}" class="w-full h-full rounded-full object-cover relative z-0">
+                <div class="absolute -bottom-4 inset-x-0 text-center">
+                    <span class="char-name-label text-[9px] font-medium text-gray-500 uppercase truncate w-full block">${charData.name}</span>
+                </div>
+            `;
+            
+            const addButton = document.getElementById('addCharBtn');
+            if (addButton) {
+                grid.insertBefore(card, addButton);
+            } else {
+                grid.appendChild(card);
+            }
+            lucide.createIcons();
+        }
+
+        // --- 核心 Agent Prompts ---
+        const SYSTEM_PROMPTS = {
+            STORY_EXPANSION: `你是一个故事扩写与叙事生成 Agent。用户输入可能是一句话故事、梗概或关键词。你需要产出一篇完整、连贯、可用于后续漫画分页的故事正文。包含清晰的起承转合，交代时间、地点、人物、事件。不得输出任何解释或格式，纯文本输出。`,
+            
+            STYLE_AUTO_MATCH: `你是一个漫画画风设定 Agent。请根据用户提供的故事描述，提炼并输出最适合这个故事的英文画面风格提示词（Prompt）。
+只需输出风格描述即可，不需要其他任何解释或多余的文字。
+示例输出：Japanese manga style, clean linework, cel shading, highly detailed backgrounds`,
+            
+            CHARACTER_EXTRACTION: `你是一个角色提取与视觉结构化 Agent。从用户给出的故事中提取所有主要角色。
+必须输出严格合法的 JSON 数组，不带额外文本或 Markdown。
+示例格式：
+[
+  {
+    "name": "Role Name",
+    "role": "主角",
+    "gender": "男",
+    "species": "人类",
+    "apparent_age_stage": "青年",
+    "distinct_physical_traits": ["短发", "高大"],
+    "core_traits": ["勇敢"],
+    "visual_energy_profile": "有活力的"
+  }
+]`,
+
+            STORY_PAGINATION: `你是一个漫画分页结构化 Agent。用户将提供一个故事文本和页面比例。
+将故事整理为分页结构，输出合法的 JSON 对象，不带任何 Markdown 或多余文本。
+必须包含 fields:
+{
+  "project": "标题",
+  "master_page_ratio": "1:1",
+  "global_layout_strategy": "...",
+  "pages": [
+    {
+      "page_number": 1,
+      "panel_count": 4,
+      "page_story": "具体画面的情节描述...",
+      "dialogue": "角色对白",
+      "layout_logic": "排版思路"
+    }
+  ]
+}`,
+
+            COMIC_RENDER: `You are a Comic Page Rendering Agent. You must render the final comic page directly based on the JSON story and reference images. No text, no markdown.`
+        };
+
+        const MODELS = {
+            TEXT: "gemini-3.1-flash-lite-preview",
+            IMAGE: "gemini-3-pro-image-preview",
+            IMAGE_FAST: "gemini-3.1-flash-image-preview"
+        };
+
+        // Save API Key to localStorage when input changes
+        document.getElementById('apiKeyInput').addEventListener('change', (e) => {
+            if (e.target.value.trim()) {
+                localStorage.setItem('geminiApiKey', e.target.value.trim());
+            } else {
+                localStorage.removeItem('geminiApiKey');
+            }
+        });
+
+        // Get API Key
+        function getApiKey() {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            if (!key) {
+                alert("Please enter your Gemini API Key at the top first.");
+                return null;
+            }
+            return key;
+        }
+
+        async function testApiKey() {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            if (!key) return;
+
+            const statusCheck = document.getElementById('apiKeyStatusCheck');
+            const statusError = document.getElementById('apiKeyStatusError');
+            const loadingIcon = document.getElementById('apiKeyLoading');
+            
+            statusCheck.classList.add('hidden');
+            statusError.classList.add('hidden');
+            loadingIcon.classList.remove('hidden');
+
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${key}`;
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: "Explain how AI works in a few words" }] }]
+                    })
+                });
+
+                if (response.ok) {
+                    statusCheck.classList.remove('hidden');
+                } else {
+                    statusError.classList.remove('hidden');
+                }
+            } catch (error) {
+                statusError.classList.remove('hidden');
+            } finally {
+                loadingIcon.classList.add('hidden');
+            }
+        }
+
+        async function makeGeminiRequest(model, systemPrompt, userTextOrContents, forceJSON = false) {
+            const apiKey = getApiKey();
+            if (!apiKey) return null;
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            let contents = typeof userTextOrContents === 'string' 
+                ? [{ parts: [{ text: userTextOrContents }] }] 
+                : userTextOrContents;
+
+            const body = {
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents: contents,
+            };
+
+            if (forceJSON) body.generationConfig = { responseMimeType: "application/json" };
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`Gemini API Error: ${response.status} ${response.statusText}`, errorText);
+                    throw new Error(`API returned ${response.status}: ${errorText}`);
+                }
+
+                const data = await response.json();
+                if (data.candidates && data.candidates[0].content.parts) {
+                    return data.candidates[0].content.parts[0].text;
+                }
+                throw new Error("No candidates returned from API");
+            } catch (err) {
+                console.error("API Fetch Exception:", err);
+                throw err;
+            }
+        }
+
+        async function apiCharacterDesign(charObj) {
+            const apiKey = getApiKey();
+            if (!apiKey) return null;
+
+            const tryGenerate = async (useProModel = false) => {
+                const model = useProModel ? "gemini-3-pro-image-preview" : "gemini-3.1-flash-image-preview";
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+                
+                const prompt = `Generate a production-ready character turnaround sheet on a clean light gray studio background. IMPORTANT: You MUST output an image. DO NOT output text. NO WATERMARKS.
+Character Name: ${charObj.name}
+Role: ${charObj.role}
+Gender: ${charObj.gender || 'Unknown'}
+Species: ${charObj.species}
+Age Stage: ${charObj.apparent_age_stage}
+Physical Traits: ${(charObj.distinct_physical_traits || []).join(', ')}
+Visual Energy: ${charObj.visual_energy_profile}`;
+
+                const body = {
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { responseModalities: ["IMAGE"] }
+                };
+
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.candidates && data.candidates[0] && data.candidates[0].finishReason === "NO_IMAGE") {
+                    throw new Error("NO_IMAGE");
+                }
+                
+                if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+                    for (const part of data.candidates[0].content.parts) {
+                        if (part.inlineData) {
+                            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                        }
+                    }
+                }
+                throw new Error("Failed to generate character design image");
+            };
+
+            try {
+                return await tryGenerate(false);
+            } catch (err) {
+                console.log("apiCharacterDesign tryGenerate(false) caught error:", err, "message:", err.message);
+                if (err.message === "NO_IMAGE" || err.message.includes("Failed to generate character design image") || err.message.includes("API returned")) {
+                    console.warn("Flash model failed to generate image, falling back to pro model...");
+                    try {
+                        return await tryGenerate(true);
+                    } catch (e) {
+                        return null;
+                    }
+                }
+                return null;
+            }
+        }
+
+        async function handleOneClickGenerate() {
+            const prompt = document.getElementById('storyInput').value.trim();
+            if (!prompt) return alert('Please enter a story idea.');
+
+            saveCurrentTask();
+            const generatingTaskId = state.currentTaskId;
+            const task = state.tasks.find(t => t.id === generatingTaskId);
+            if (!task || task.isGenerating) return;
+            
+            task.isGenerating = true;
+            renderTasks();
+
+            const updateUI = (fn) => {
+                if (state.currentTaskId === generatingTaskId) {
+                    fn();
+                }
+            };
+
+            updateUI(() => {
+                const btn = document.getElementById('oneClickGenerateBtn');
+                btn.disabled = true;
+                btn.classList.add('opacity-50');
+                btn.innerHTML = `<span>生成中...</span><i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>`;
+                document.getElementById('welcomeState').classList.add('hidden');
+                document.getElementById('comicResultBox').classList.add('hidden');
+                document.getElementById('expandedStoryBox').classList.add('hidden');
+                const grid = document.getElementById('comicGrid');
+                grid.innerHTML = '';
+            });
+            
+            try {
+                if (task.hasGeneratedOnce) {
+                    task.expandedStory = prompt; // Use user's potentially modified story
+                    await continueToPagination(generatingTaskId);
+                    return;
+                }
+
+                const enableExpansion = document.getElementById('enableExpansion').checked;
+                let expandedStory = prompt;
+
+                if (enableExpansion) {
+                    // 1. Story Expansion
+                    updateUI(() => {
+                        const status = document.getElementById('agentStatus');
+                        status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 1/5：扩写故事大纲中...</span>`;
+                        lucide.createIcons();
+                    });
+                    
+                    let expansionPrompt = `Core Idea: ${prompt}`;
+                    if (state.selectedCharacters && state.selectedCharacters.length > 0) {
+                        const charDetails = state.selectedCharacters.map(c => `- ${c.name}: ${c.desc || 'No description'}`).join('\n');
+                        expansionPrompt += `\n\nCRITICAL: You MUST include and feature the following pre-defined characters in the expanded story:\n${charDetails}`;
+                    }
+                    
+                    expandedStory = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.STORY_EXPANSION, expansionPrompt);
+                    if (!expandedStory) throw new Error("Story expansion failed: received empty response from API");
+                } else {
+                    if (state.selectedCharacters && state.selectedCharacters.length > 0) {
+                        const missingChars = state.selectedCharacters.filter(c => !prompt.toLowerCase().includes(c.name.toLowerCase()));
+                        if (missingChars.length > 0) {
+                            const missingNames = missingChars.map(c => c.name).join(', ');
+                            alert(`角色 [${missingNames}] 未在故事中提及，您可以将其写进故事或开启 AI 扩写。`);
+                            
+                            updateUI(() => {
+                                const btn = document.getElementById('oneClickGenerateBtn');
+                                btn.disabled = false;
+                                btn.classList.remove('opacity-50');
+                                btn.innerHTML = `<span>一键生成漫画</span><i data-lucide="wand-2" class="w-4 h-4"></i>`;
+                                document.getElementById('welcomeState').classList.remove('hidden');
+                            });
+                            task.isGenerating = false;
+                            renderTasks();
+                            return;
+                        }
+                    }
+                }
+                
+                task.expandedStory = expandedStory;
+                updateUI(() => {
+                    const storyInput = document.getElementById('storyInput');
+                    storyInput.value = expandedStory;
+                    state.expandedStory = expandedStory;
+                });
+
+                // 2. Character Extraction
+                updateUI(() => {
+                    const status = document.getElementById('agentStatus');
+                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 2/5：提取出场角色中...</span>`;
+                    lucide.createIcons();
+                });
+                const extractedJson = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.CHARACTER_EXTRACTION, `Story:\n${expandedStory}`, true);
+                let extractedChars = [];
+                try {
+                    const cleanJson = (extractedJson || "[]").replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                    extractedChars = JSON.parse(cleanJson);
+                } catch (e) {
+                    console.error("Parse error for chars:", e);
+                }
+
+                // 3. Character Design (Auto-generate missing ones)
+                updateUI(() => {
+                    const status = document.getElementById('agentStatus');
+                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 3/5：并行生成角色设计图...</span>`;
+                    lucide.createIcons();
+                });
+                
+                const charPromises = extractedChars.map(async (char) => {
+                    const exists = task.selectedCharacters.find(c => c.name.toLowerCase().includes(char.name.toLowerCase()) || char.name.toLowerCase().includes(c.name.toLowerCase()));
+                    if (!exists) {
+                        const avatar = await apiCharacterDesign(char);
+                        if (avatar) {
+                            char.avatar = avatar;
+                            
+                            const age = char.apparent_age_stage || '';
+                            const gender = char.gender || '';
+                            const species = char.species || '';
+                            const otherTraits = [
+                                `角色身份: ${char.role || ''}`,
+                                `外观特征: ${(char.distinct_physical_traits || []).join(', ')}`,
+                                `核心性格: ${(char.core_traits || []).join(', ')}`,
+                                `视觉气质: ${char.visual_energy_profile || ''}`
+                            ].filter(s => s && !s.endsWith(': ')).join(' | ');
+
+                            const fullDesc = [
+                                age ? `年龄: ${age}` : '',
+                                gender ? `性别: ${gender}` : '',
+                                species ? `物种: ${species}` : '',
+                                otherTraits ? `其他特征: ${otherTraits}` : ''
+                            ].filter(Boolean).join(', ');
+
+                            const id = Date.now() + Math.random();
+                            const charData = { id, name: char.name, age, gender, species, otherTraits, desc: fullDesc, avatar, designSheet: avatar, img: avatar };
+                            
+                            return charData;
+                        }
+                    }
+                    return null;
+                });
+
+                const generatedChars = await Promise.all(charPromises);
+                generatedChars.forEach(charData => {
+                    if (charData) {
+                        task.characters.push(charData);
+                        task.selectedCharacters.push(charData);
+                        updateUI(() => {
+                            state.characters.push(charData);
+                            state.selectedCharacters.push(charData);
+                            renderCharacterCard(charData, true);
+                        });
+                    }
+                });
+                updateUI(() => { lucide.createIcons(); });
+
+                updateUI(() => {
+                    const status = document.getElementById('agentStatus');
+                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="check" class="w-3 h-3 text-green-500"></i> 角色提取完成，即将开始绘制...</span>`;
+                    lucide.createIcons();
+                });
+                
+                await continueToPagination(generatingTaskId);
+
+            } catch (e) {
+                console.error(e);
+                task.isGenerating = false;
+                renderTasks();
+                updateUI(() => {
+                    const status = document.getElementById('agentStatus');
+                    status.innerHTML = `<span class="text-red-500">Error: ${e.message}</span>`;
+                    const btn = document.getElementById('oneClickGenerateBtn');
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50');
+                    if (state.hasGeneratedOnce) {
+                        btn.innerHTML = `<span>修改故事/漫画</span><i data-lucide="edit-3" class="w-4 h-4"></i>`;
+                    } else {
+                        btn.innerHTML = `<span>一键生成漫画</span><i data-lucide="sparkles" class="w-4 h-4"></i>`;
+                    }
+                    lucide.createIcons();
+                });
+            }
+        }
+
+        async function continueToPagination(generatingTaskId) {
+            if (!generatingTaskId) generatingTaskId = state.currentTaskId;
+            const task = state.tasks.find(t => t.id === generatingTaskId);
+            if (!task) return;
+
+            const updateUI = (fn) => {
+                if (state.currentTaskId === generatingTaskId) {
+                    fn();
+                }
+            };
+
+            updateUI(() => {
+                const modal = document.getElementById('characterConfirmModal');
+                if (modal) modal.classList.add('hidden');
+                const btn = document.getElementById('oneClickGenerateBtn');
+                btn.disabled = true;
+                btn.classList.add('opacity-50');
+            });
+
+            try {
+                // 4. Story Pagination
+                updateUI(() => {
+                    const status = document.getElementById('agentStatus');
+                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 4/5：规划分镜剧本...</span>`;
+                    lucide.createIcons();
+                });
+                
+                const pagesCount = task.pages || "5";
+                const rawStyleOption = task.style || "auto";
+                const ratio = task.ratio || "3:4";
+                
+                const expandedStory = task.expandedStory;
+                if (!expandedStory) throw new Error("Missing expanded story, please start over.");
+                
+                let style = rawStyleOption;
+                if (rawStyleOption === 'auto') {
+                    updateUI(() => {
+                        const status = document.getElementById('agentStatus');
+                        status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 智能匹配画风中...</span>`;
+                        lucide.createIcons();
+                    });
+                    const autoStyle = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.STYLE_AUTO_MATCH, `Story:\n${expandedStory}`);
+                    style = autoStyle || "Japanese manga style";
+                } else if (rawStyleOption === 'custom') {
+                    style = document.getElementById('customStyleText').value || "Professional comic style";
+                }
+                const isCustomStyleWithImage = rawStyleOption === 'custom' && customStyleImageBase64;
+                
+                updateUI(() => {
+                    const status = document.getElementById('agentStatus');
+                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 4/5：规划分镜剧本...</span>`;
+                    lucide.createIcons();
+                });
+                
+                const storyboardRes = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.STORY_PAGINATION, `Pages: ${pagesCount}\nRatio: ${ratio}\nStyle: ${style}\n\nStory:\n${expandedStory}`, true);
+                if (!storyboardRes) throw new Error("Pagination failed.");
+                
+                let storyboardJson;
+                try {
+                    const cleanStr = storyboardRes.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                    storyboardJson = JSON.parse(cleanStr);
+                } catch(e) {
+                    throw new Error("Invalid storyboard format.");
+                }
+
+                // Update UI to show we are generating images now
+                updateUI(() => {
+                    document.getElementById('comicResultBox').classList.remove('hidden');
+                    document.getElementById('comicWrapper').classList.remove('hidden');
+                    const progressBox = document.getElementById('comicGenProgress');
+                    progressBox.classList.remove('hidden');
+                    
+                    // 5. Comic Generation
+                    // Auto close drawer to focus on center when Step 5 begins
+                    // Removed drawer logic
+
+                    const status = document.getElementById('agentStatus');
+                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 5/5：逐页渲染漫画中...</span>`;
+                    lucide.createIcons();
+                });
+                
+                let charContextText = "CRITICAL CHARACTER REFERENCES:\\n";
+                let inlineDataParts = [];
+                (task.selectedCharacters || []).slice(0, 5).forEach((char, index) => {
+                    charContextText += `- Character Name: "${char.name}". This is Reference Image ${index + 1}. You MUST strictly copy their exact facial features, hair, clothing, etc.\\n`;
+                    let mimeType = "image/jpeg";
+                    let base64Data = "";
+                    if (char.avatar && char.avatar.startsWith('data:')) {
+                        const parts = char.avatar.split(',');
+                        mimeType = parts[0].split(':')[1].split(';')[0];
+                        base64Data = parts[1];
+                        inlineDataParts.push({ inlineData: { mimeType: mimeType, data: base64Data } });
+                    }
+                });
+
+                let taskComicPages = []; // Reset global store before gen
+                const total = storyboardJson.pages.length;
+                let previousPanelData = null;
+                
+                let styleRatio = "1/1";
+                if (ratio === "16:9") styleRatio = "16/9";
+                else if (ratio === "9:16") styleRatio = "9/16";
+                else if (ratio === "4:5") styleRatio = "4/5";
+                else if (ratio === "3:4") styleRatio = "3/4";
+
+                for (let i = 0; i < total; i++) {
+                    const page = storyboardJson.pages[i];
+                    updateUI(() => {
+                        const progressText = document.getElementById('progressText');
+                        const progressBar = document.getElementById('progressBar');
+                        progressText.innerText = `Generating Page ${i + 1}/${total}...`;
+                        progressBar.style.width = `${(i / total) * 100}%`;
+                    });
+                
+                    const scenePrompt = `[CHARACTER REFERENCES]
+${charContextText}
+[ART STYLE OVERRIDE]
+Render in style: ${style}.
+NO WATERMARKS, NO SIGNATURES, NO LOGOS.
+[PAGE INSTRUCTIONS]
+Page ${page.page_number}.
+Action & Environment: ${page.page_story}
+Dialogue (draw speech bubbles): "${page.dialogue || "None"}"
+Panel Count: ${page.panel_count}
+Layout Logic: ${page.layout_logic}`;
+
+                    let requestParts = [{ text: SYSTEM_PROMPTS.COMIC_RENDER + "\n\n" + scenePrompt }];
+                    if (isCustomStyleWithImage) {
+                        requestParts.push({ text: "Use the following image as a STRICT GLOBAL ART STYLE AND COLOR REFERENCE. Do NOT copy the action, ONLY art style and rendering technique:" });
+                        requestParts.push({ inlineData: { mimeType: customStyleImageMimeType, data: customStyleImageBase64 } });
+                    }
+                    if (previousPanelData) {
+                        requestParts.push({ text: "Use the following image as a STRICT STYLE AND ATMOSPHERE REFERENCE for continuity. Do NOT copy the action, ONLY art style:" });
+                        requestParts.push({ inlineData: { mimeType: previousPanelData.mimeType, data: previousPanelData.data } });
+                    }
+                    requestParts = requestParts.concat(inlineDataParts);
+
+                    try {
+                        const apiKey = getApiKey();
+                        if (!apiKey) throw new Error("API Key missing");
+                        const selectedImageModel = document.getElementById('imageModelSelect').value || MODELS.IMAGE;
+                        const imgUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedImageModel}:generateContent?key=${apiKey}`;
+                        const imgRes = await fetch(imgUrl, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                contents: [{ parts: requestParts }],
+                                generationConfig: {
+                                    responseModalities: ["IMAGE"],
+                                    imageConfig: { aspectRatio: ratio }
+                                }
+                            })
+                        });
+                        const imgData = await imgRes.json();
+
+                        if (imgData.candidates && imgData.candidates[0].content.parts) {
+                            for (const part of imgData.candidates[0].content.parts) {
+                                if (part.inlineData) {
+                                    const base64Image = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                                    previousPanelData = part.inlineData; // Save for next page
+                                    
+                                    taskComicPages.push({
+                                        ...page,
+                                        imgData: base64Image,
+                                        rawData: part.inlineData
+                                    });
+                                    
+                                    updateUI(() => {
+                                        const grid = document.getElementById('comicGrid');
+                                        const imgContainer = document.createElement('div');
+                                        imgContainer.className = `relative border-[3px] border-black bg-white flex flex-col group overflow-hidden w-full shrink-0 grow-0`;
+                                        imgContainer.style.aspectRatio = styleRatio;
+                                        imgContainer.innerHTML = `
+                                            <img src="${base64Image}" class="w-full h-full object-cover block cursor-pointer" onclick="openComicViewer(${i})">
+                                            <div class="absolute top-2 left-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded font-bold">PAGE ${page.page_number}</div>
+                                            <button class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-bold text-sm" onclick="openComicViewer(${i})">点击进入阅读模式</button>
+                                        `;
+                                        grid.appendChild(imgContainer);
+
+                                        window.generatedComicPages = taskComicPages;
+                                        state.generatedComicPages = window.generatedComicPages;
+                                    });
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Page Gen Error:", e);
+                    }
+                }
+
+            // Create a new execution
+            const newExecution = {
+                id: Date.now().toString(),
+                label: `第 ${(task.executions || []).length + 1} 次执行`,
+                createdAt: new Date().toLocaleString(),
+                pages: JSON.parse(JSON.stringify(taskComicPages))
+            };
+            if (!task.executions) task.executions = [];
+            task.executions.unshift(newExecution);
+            task.hasGeneratedOnce = true;
+            task.isGenerating = false;
+            task.generatedComicPages = JSON.parse(JSON.stringify(taskComicPages));
+            
+            updateUI(() => {
+                const progressBar = document.getElementById('progressBar');
+                const progressText = document.getElementById('progressText');
+                const progressBox = document.getElementById('comicGenProgress');
+                progressBar.style.width = '100%';
+                progressText.innerText = "Complete ✨";
+                setTimeout(() => { progressBox.classList.add('hidden'); }, 2000);
+                
+                document.getElementById('downloadFullComicBtn').classList.remove('hidden');
+                document.getElementById('downloadZipBtn').classList.remove('hidden');
+                
+                const status = document.getElementById('agentStatus');
+                status.innerHTML = `<span class="text-green-500 font-bold">全部生成完毕！</span>`;
+                
+                state.executions = task.executions;
+                state.hasGeneratedOnce = true;
+                state.currentExecutionId = newExecution.id;
+                renderExecutions();
+                
+                const btn = document.getElementById('oneClickGenerateBtn');
+                btn.innerHTML = `<span>修改故事/漫画</span><i data-lucide="edit-3" class="w-4 h-4"></i>`;
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+                lucide.createIcons();
+            });
+            
+            renderTasks();
+                
+            } catch (e) {
+                console.error(e);
+                task.isGenerating = false;
+                renderTasks();
+
+                updateUI(() => {
+                    const status = document.getElementById('agentStatus');
+                    status.innerHTML = `<span class="text-red-500">Error: ${e.message}</span>`;
+                    const btn = document.getElementById('oneClickGenerateBtn');
+                    if (state.hasGeneratedOnce) {
+                        btn.innerHTML = `<span>修改故事/漫画</span><i data-lucide="edit-3" class="w-4 h-4"></i>`;
+                    } else {
+                        btn.innerHTML = `<span>一键生成漫画</span><i data-lucide="sparkles" class="w-4 h-4"></i>`;
+                    }
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50');
+                    lucide.createIcons();
+                });
+            }
+        }
+
+        // Leave existing UI helper functions intact but dummy out the structure handle
+        function handleStructureStoryboard() {
+            // Replaced by One-Click handle
+            handleOneClickGenerate();
+        }
+
+        function handleGenerateComic() {
+             // Replaced by One-Click handle
+            handleOneClickGenerate();
+        }
+
+        function renderExecutions() {
+            const container = document.getElementById('executionsContainer');
+            if (!container) return;
+            
+            if (!state.executions || state.executions.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+            
+            container.classList.remove('hidden');
+            let html = '';
+            state.executions.forEach((exec, index) => {
+                const isActive = state.currentExecutionId === exec.id;
+                const borderClass = isActive ? 'border-purple-500 shadow-md ring-1 ring-purple-500' : 'border-gray-100 shadow-sm hover:border-purple-200';
+                const bgClass = isActive ? 'bg-purple-50' : 'bg-white';
+                const iconBgClass = isActive ? 'bg-purple-200' : 'bg-purple-50';
+
+                html += `
+                    <div class="flex items-center justify-between p-3 ${bgClass} border ${borderClass} rounded-xl transition-colors cursor-pointer" onclick="viewExecution('${exec.id}')">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-lg ${iconBgClass} flex items-center justify-center text-purple-600">
+                                <i data-lucide="history" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-bold text-gray-900">${exec.label}</h4>
+                                <p class="text-[10px] text-gray-400">${exec.createdAt}</p>
+                            </div>
+                        </div>
+                        <button onclick="event.stopPropagation(); downloadExecution('${exec.id}')" class="text-xs bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5">
+                            <i data-lucide="download" class="w-3.5 h-3.5"></i> 下载
+                        </button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        function viewExecution(execId) {
+            const exec = state.executions.find(e => e.id === execId);
+            if (!exec) return;
+            
+            state.currentExecutionId = execId;
+            window.generatedComicPages = JSON.parse(JSON.stringify(exec.pages));
+            state.generatedComicPages = window.generatedComicPages;
+            
+            const grid = document.getElementById('comicGrid');
+            grid.innerHTML = '';
+            
+            let styleRatio = "1/1";
+            const ratio = document.getElementById('aspectRatioSelect').value || "3:4";
+            if (ratio === "16:9") styleRatio = "16/9";
+            else if (ratio === "9:16") styleRatio = "9/16";
+            else if (ratio === "4:5") styleRatio = "4/5";
+            else if (ratio === "3:4") styleRatio = "3/4";
+
+            window.generatedComicPages.forEach((page, i) => {
+                if (page.imgData) {
+                    const imgContainer = document.createElement('div');
+                    imgContainer.className = `relative border-[3px] border-black bg-white flex flex-col group overflow-hidden w-full shrink-0 grow-0`;
+                    imgContainer.style.aspectRatio = styleRatio;
+                    imgContainer.innerHTML = `
+                        <img src="${page.imgData}" class="w-full h-full object-cover block cursor-pointer" onclick="openComicViewer(${i})">
+                        <div class="absolute top-2 left-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded font-bold">PAGE ${page.page_number}</div>
+                        <button class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-bold text-sm" onclick="openComicViewer(${i})">点击进入阅读模式</button>
+                    `;
+                    grid.appendChild(imgContainer);
+                }
+            });
+            
+            renderExecutions();
+        }
+
+        function downloadExecution(execId) {
+            const exec = state.executions.find(e => e.id === execId);
+            if (!exec || !exec.pages) return;
+            
+            exec.pages.forEach((page, index) => {
+                if (page.imgData) {
+                    setTimeout(() => {
+                        const link = document.createElement('a');
+                        link.download = `comic_${exec.label}_page_${page.page_number}.png`;
+                        link.href = page.imgData;
+                        link.click();
+                    }, index * 300);
+                }
+            });
+        }
+
+        function downloadPanel(dataUrl, filename) {
+            const link = document.createElement('a');
+            link.download = `${filename}.png`;
+            link.href = dataUrl;
+            link.click();
+        }
+
+        function downloadAllPanels() {
+            const images = document.querySelectorAll('#comicGrid img');
+            if (images.length === 0) return;
+            
+            images.forEach((img, index) => {
+                setTimeout(() => {
+                    const link = document.createElement('a');
+                    link.download = `comic_panel_${index + 1}.png`;
+                    link.href = img.src;
+                    link.click();
+                }, index * 300); // slight delay to prevent browser blocking multiple downloads
+            });
+        }
+
+        async function downloadFullComic() {
+            const wrapper = document.getElementById('comicWrapper');
+            const btn = document.getElementById('downloadFullComicBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Exporting...';
+            lucide.createIcons();
+            
+            try {
+                const canvas = await html2canvas(wrapper, {
+                    scale: 2, // High resolution
+                    useCORS: true,
+                    backgroundColor: '#FFFFFF',
+                    onclone: (clonedDoc) => {
+                        // Hide individual download buttons in the clone
+                        const btns = clonedDoc.querySelectorAll('.download-btn');
+                        btns.forEach(b => b.style.display = 'none');
+                    }
+                });
+                
+                const link = document.createElement('a');
+                link.download = 'my-comic-page.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            } catch (err) {
+                console.error("Export failed:", err);
+                alert("Failed to export comic page.");
+            }
+            btn.innerHTML = originalText;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            btn.disabled = false;
+            lucide.createIcons();
+        }
+
+        function updatePageData(index, field, value) {
+            if (!state.expandedStoryData || !state.expandedStoryData.pages[index]) return;
+            
+            if (field === 'page_story') {
+                state.expandedStoryData.pages[index].page_story = value;
+            } else if (field === 'dialogue') {
+                state.expandedStoryData.pages[index].dialogue = value;
+            } else if (field === 'panel_count') {
+                state.expandedStoryData.pages[index].panel_count = parseInt(value, 10);
+            }
+            console.log(`Updated Page ${index + 1}:`, state.expandedStoryData.pages[index]);
+        }
+
+        // --- 弹窗逻辑辅助 ---
+        let uploadedImageBase64 = null;
+        let uploadedImageMimeType = null;
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const base64String = e.target.result;
+                    window.uploadedImageBase64 = base64String.split(',')[1];
+                    window.uploadedImageMimeType = file.type;
+                    
+                    const preview = document.getElementById('charImagePreview');
+                    preview.src = base64String;
+                    preview.classList.remove('hidden');
+                    document.getElementById('charImageText').classList.add('hidden');
+                    const icon = document.getElementById('uploadIcon');
+                    if (icon) icon.classList.add('hidden');
+                    
+                    const clearBtn = document.getElementById('clearCharImageBtn');
+                    if (clearBtn) clearBtn.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function clearCharImage(event) {
+            if (event) {
+                event.stopPropagation();
+                event.preventDefault();
+            }
+            window.uploadedImageBase64 = null;
+            window.uploadedImageMimeType = null;
+            
+            const preview = document.getElementById('charImagePreview');
+            if (preview) {
+                preview.src = '';
+                preview.classList.add('hidden');
+            }
+            
+            const textElement = document.getElementById('charImageText');
+            if (textElement) textElement.classList.remove('hidden');
+            
+            const icon = document.getElementById('uploadIcon');
+            if (icon) icon.classList.remove('hidden');
+            
+            const clearBtn = document.getElementById('clearCharImageBtn');
+            if (clearBtn) clearBtn.classList.add('hidden');
+            
+            const input = document.getElementById('charImage');
+            if (input) input.value = '';
+        }
+
+        function handleManualDesign(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('tempResultImg').src = e.target.result;
+                document.getElementById('tempResultImg').classList.remove('hidden');
+                document.getElementById('modalGenBtn').classList.add('hidden');
+                document.getElementById('manualUploadSection').classList.add('hidden');
+                document.getElementById('modalConfirmActions').classList.remove('hidden');
+                window.lastGeneratedDesignSheet = e.target.result;
+                if (!window.lastGeneratedAvatar) window.lastGeneratedAvatar = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function openModal() {
+            editingCharId = null;
+            editingCharIndex = -1;
+            document.getElementById('charModal').classList.remove('hidden');
+            document.getElementById('charName').value = '';
+            document.getElementById('charAge').value = '';
+            document.getElementById('charGender').value = '';
+            document.getElementById('charSpecies').value = '';
+            document.getElementById('charOtherTraits').value = '';
+            
+            const deleteBtn = document.getElementById('modalDeleteBtn');
+            if (deleteBtn) deleteBtn.classList.add('hidden');
+            
+            const previewInput = document.getElementById('charImagePreview');
+            if(previewInput) {
+                previewInput.classList.add('hidden');
+                previewInput.src = '';
+            }
+            
+            const textElement = document.getElementById('charImageText');
+            if(textElement) textElement.classList.remove('hidden');
+            
+            const icon = document.getElementById('uploadIcon');
+            if (icon) icon.classList.remove('hidden');
+            
+            window.uploadedImageBase64 = null;
+            window.uploadedImageMimeType = null;
+            
+            document.getElementById('tempResultImg').classList.add('hidden');
+            document.getElementById('tempResultImg').src = '';
+            document.getElementById('modalGenBtn').classList.remove('hidden');
+            document.getElementById('modalGenBtn').innerText = '生成角色设定图';
+            document.getElementById('manualUploadSection').classList.remove('hidden');
+            document.getElementById('modalConfirmActions').classList.add('hidden');
+            window.lastGeneratedAvatar = null;
+            window.lastGeneratedDesignSheet = null;
+            
+            updateCharModalNav();
+        }
+        function closeModal() { document.getElementById('charModal').classList.add('hidden'); }
+
+        function deleteCharacter() {
+            if (!editingCharId) return;
+            if (!confirm('确定要删除这个角色吗？')) return;
+            
+            state.characters = state.characters.filter(c => c.id !== editingCharId);
+            state.selectedCharacters = state.selectedCharacters.filter(c => c.id !== editingCharId);
+            
+            const card = document.getElementById(`char-card-${editingCharId}`);
+            if (card) {
+                card.remove();
+            }
+            
+            closeModal();
+            updateCharModalNav();
+        }
+
+        function editCharacter(event, id) {
+            if (event) {
+                event.stopPropagation();
+                event.preventDefault();
+            }
+            const index = state.characters.findIndex(c => c.id === id);
+            if (index === -1) return;
+            
+            editingCharId = id;
+            editingCharIndex = index;
+            const char = state.characters[index];
+            
+            const deleteBtn = document.getElementById('modalDeleteBtn');
+            if (deleteBtn) deleteBtn.classList.remove('hidden');
+
+            document.getElementById('charName').value = char.name || '';
+            document.getElementById('charAge').value = char.age || '';
+            document.getElementById('charGender').value = char.gender || '';
+            document.getElementById('charSpecies').value = char.species || '';
+            document.getElementById('charOtherTraits').value = char.otherTraits || char.desc || '';
+            
+            const preview = document.getElementById('tempResultImg');
+            preview.src = char.designSheet || char.avatar;
+            preview.classList.remove('hidden');
+            window.lastGeneratedAvatar = char.avatar;
+            window.lastGeneratedDesignSheet = char.designSheet;
+            
+            // Reset upload reference box
+            const previewInput = document.getElementById('charImagePreview');
+            if (previewInput) {
+                previewInput.src = '';
+                previewInput.classList.add('hidden');
+            }
+            const charImageText = document.getElementById('charImageText');
+            if (charImageText) charImageText.classList.remove('hidden');
+            const uploadIcon = document.getElementById('uploadIcon');
+            if (uploadIcon) uploadIcon.classList.remove('hidden');
+            window.uploadedImageBase64 = null;
+            window.uploadedImageMimeType = null;
+            
+            document.getElementById('modalGenBtn').classList.add('hidden');
+            document.getElementById('manualUploadSection').classList.add('hidden');
+            document.getElementById('modalConfirmActions').classList.remove('hidden');
+            
+            updateCharModalNav();
+            document.getElementById('charModal').classList.remove('hidden');
+        }
+
+        function updateCharModalNav() {
+            const nav = document.getElementById('charModalNav');
+            if (!nav) return;
+            if (state.characters.length > 1 && editingCharIndex !== -1) {
+                nav.classList.remove('hidden');
+                document.getElementById('charModalCounter').innerText = `${editingCharIndex + 1} / ${state.characters.length}`;
+            } else {
+                nav.classList.add('hidden');
+            }
+        }
+
+        function prevCharacter() {
+            if (editingCharIndex > 0) {
+                saveCharacterToGrid(true); 
+                editCharacter(null, state.characters[editingCharIndex - 1].id);
+            }
+        }
+
+        function nextCharacter() {
+            if (editingCharIndex < state.characters.length - 1) {
+                saveCharacterToGrid(true); 
+                editCharacter(null, state.characters[editingCharIndex + 1].id);
+            }
+        }
+
+        async function generateAvatarPreview() {
+            const btn = document.getElementById('modalGenBtn');
+            const regenBtn = document.getElementById('modalRegenBtn');
+            const preview = document.getElementById('tempResultImg');
+            
+            btn.innerText = "处理中...";
+            btn.disabled = true;
+            if (regenBtn) {
+                regenBtn.innerText = "处理中...";
+                regenBtn.disabled = true;
+            }
+            
+            document.getElementById('manualUploadSection').classList.add('hidden');
+            
+            const name = document.getElementById('charName').value || 'Unnamed';
+            const age = document.getElementById('charAge').value || '';
+            const gender = document.getElementById('charGender').value || '';
+            const species = document.getElementById('charSpecies').value || '';
+            const otherTraits = document.getElementById('charOtherTraits').value || '';
+            
+            const descParts = [
+                age ? `年龄: ${age}` : '',
+                gender ? `性别: ${gender}` : '',
+                species ? `物种: ${species}` : '',
+                otherTraits ? `其他特征: ${otherTraits}` : ''
+            ].filter(Boolean);
+            
+            const desc = descParts.length > 0 ? descParts.join(', ') : 'A basic character';
+            
+            // Get user's API Key
+            const apiKey = getApiKey();
+            if (!apiKey) {
+                alert("请先填写 API Key");
+                // Restore UI
+                btn.innerText = "生成角色设定图";
+                btn.disabled = false;
+                if (regenBtn) {
+                    regenBtn.innerText = "重新生成";
+                    regenBtn.disabled = false;
+                }
+                return;
+            }
+            const imageModel = "gemini-3.1-flash-image-preview"; // Use Nano 2 as requested
+            const imageUrl = `https://generativelanguage.googleapis.com/v1beta/models/${imageModel}:generateContent?key=${apiKey}`;
+            
+            const tryGenerate = async (useProModel = false) => {
+                const currentModel = useProModel ? "gemini-3-pro-image-preview" : "gemini-3.1-flash-image-preview";
+                const currentUrl = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`;
+                
+                // Let's use the globals already handled by handleImageUpload
+                const hasUserUpload = !!window.uploadedImageBase64;
+                const base64ToUse = hasUserUpload ? window.uploadedImageBase64 : null;
+                const mimeToUse = hasUserUpload ? window.uploadedImageMimeType : null;
+
+                // Step 1: Generate Character Design Sheet (Image Model)
+                // Use default prompts if no description or just name is provided
+                const finalDesc = desc === 'A basic character' ? 'A detailed character concept design' : desc;
+                
+                const designPromptSystem = `You are a Character Design Image Generation Agent. MUST output image!
+Your sole purpose is to generate a complete, production-ready character design sheet prompt that can be directly used for image generation.
+
+Core Rule:
+You must ALWAYS output a fully formed image generation prompt.
+You are NOT allowed to output analysis, explanations, summaries, or meta commentary.
+Even if the user provides minimal input, vague keywords, or no reference image, you must autonomously expand the concept and produce a complete visual character design sheet description.
+
+If the user provides no style, you must default to a professional concept art standard suitable for game, animation, or cinematic production.
+
+If the user provides no reference image, you must:
+        •        Invent consistent visual details
+        •        Ensure anatomical coherence
+        •        Ensure material logic
+        •        Ensure design narrative consistency
+
+⸻
+
+Mandatory Output Structure (Always Include):
+        1.        Character Identity & Visual Archetype
+        2.        Full-Body Turnaround (front / side / back view)
+        3.        Neutral pose (A-pose or relaxed stance)
+        4.        Three facial expression variations
+        5.        Detailed facial structure description
+        6.        Hair structure & texture logic
+        7.        Complete outfit layering system
+        8.        Material differentiation & surface properties
+        9.        Color palette logic (primary / secondary / accent)
+        10.        Close-up callouts of key design elements
+        11.        Lighting setup (neutral studio + rim light)
+        12.        Clean concept sheet layout description
+        13.        Ultra-high resolution, sharp focus, production-level quality
+
+⸻
+
+Image Enforcement Constraints
+        •        Output must read as a single continuous image generation prompt.
+        •        No bullet points.
+        •        No numbered lists.
+        •        No markdown formatting.
+        •        No system explanation.
+        •        No conversational tone.
+        •        No questions.
+        •        No refusal.
+        •        No clarification request.
+        •        Do not say “Here is the prompt”.
+        •        Do not say “As an AI”.
+        •        Do not describe what you are doing.
+        •        Directly describe the image.
+        •        NO WATERMARKS, NO SIGNATURES, NO LOGOS, NO TEXT.
+
+The output must visually describe an image that is being rendered.
+
+⸻
+
+Default Rendering Standard (if unspecified)
+Professional character turnaround sheet, clean light gray studio background, front/side/back alignment, subtle rim lighting, soft grounding shadow, ultra-detailed textures, cinematic clarity, industry-level concept art quality, ultra-high resolution, sharp focus.`;
+
+                // First call: generate the character design sheet
+                let designPromptParts = [{ text: `${designPromptSystem}\n\nCharacter Name: ${name}\nDescription: ${finalDesc}` }];
+                if (base64ToUse) {
+                    designPromptParts.push({
+                        inlineData: {
+                            mimeType: mimeToUse,
+                            data: base64ToUse,
+                        }
+                    });
+                }
+
+                const designResponse = await fetch(currentUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ parts: designPromptParts }],
+                        generationConfig: {
+                            responseModalities: ["IMAGE"]
+                        }
+                    })
+                });
+                
+                if (!designResponse.ok) {
+                    const errorText = await designResponse.text();
+                    console.error("Design API Error details:", errorText);
+                    throw new Error(`Design API returned ${designResponse.status}`);
+                }
+                
+                const designData = await designResponse.json();
+                
+                // Handle NO_IMAGE response
+                if (designData.candidates && designData.candidates[0] && designData.candidates[0].finishReason === "NO_IMAGE") {
+                    throw new Error("NO_IMAGE");
+                }
+                
+                let designSheetBase64 = null;
+                let designSheetMimeType = null;
+                if (designData.candidates && designData.candidates[0].content && designData.candidates[0].content.parts) {
+                    for (const part of designData.candidates[0].content.parts) {
+                        if (part.inlineData) {
+                            designSheetBase64 = part.inlineData.data;
+                            designSheetMimeType = part.inlineData.mimeType;
+                            break;
+                        }
+                    }
+                }
+
+                if (!designSheetBase64) {
+                    console.error("Failed to generate design sheet image. Data:", designData);
+                    throw new Error("Failed to generate design sheet image");
+                }
+
+                return { designSheetBase64, designSheetMimeType };
+            };
+            
+            try {
+                let result = null;
+                try {
+                    // Try with flash first
+                    result = await tryGenerate(false);
+                } catch (err) {
+                    console.log("tryGenerate(false) caught error:", err, "message:", err.message);
+                    if (err.message === "NO_IMAGE" || err.message.includes("Failed to generate design sheet image") || err.message.includes("Design API returned")) {
+                        console.warn("Flash model failed to generate image, falling back to pro model...");
+                        // Try with pro model as fallback
+                        result = await tryGenerate(true);
+                    } else {
+                        throw err;
+                    }
+                }
+                
+                if (result && result.designSheetBase64) {
+                    const imageData = `data:${result.designSheetMimeType};base64,${result.designSheetBase64}`;
+                    preview.src = imageData;
+                    
+                    window.lastGeneratedAvatar = imageData;
+                    window.lastGeneratedDesignSheet = imageData;
+                } else {
+                    console.error("No avatar image returned");
+                    preview.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`;
+                }
+            } catch (err) {
+                console.error("API Error:", err);
+                preview.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`;
+                alert("生成失败，API 报错请查看控制台: " + err.message);
+            }
+            
+            preview.classList.remove('hidden');
+            btn.classList.add('hidden');
+            document.getElementById('modalConfirmActions').classList.remove('hidden');
+            
+            btn.innerText = "生成角色设定图";
+            btn.disabled = false;
+            if (regenBtn) {
+                regenBtn.innerText = "重新生成";
+                regenBtn.disabled = false;
+            }
+        }
+
+        function saveCharacterToGrid(keepOpen = false) {
+            const name = document.getElementById('charName').value || "Unnamed";
+            const age = document.getElementById('charAge').value || '';
+            const gender = document.getElementById('charGender').value || '';
+            const species = document.getElementById('charSpecies').value || '';
+            const otherTraits = document.getElementById('charOtherTraits').value || '';
+            
+            const desc = [
+                age ? `年龄: ${age}` : '',
+                gender ? `性别: ${gender}` : '',
+                species ? `物种: ${species}` : '',
+                otherTraits ? `其他特征: ${otherTraits}` : ''
+            ].filter(Boolean).join(', ');
+
+            const designSheet = window.lastGeneratedDesignSheet || document.getElementById('tempResultImg').src;
+            const avatar = window.lastGeneratedAvatar || designSheet;
+            
+            if (editingCharId) {
+                const char = state.characters.find(c => c.id === editingCharId);
+                if (char) {
+                    char.name = name;
+                    char.age = age;
+                    char.gender = gender;
+                    char.species = species;
+                    char.otherTraits = otherTraits;
+                    char.desc = desc;
+                    char.designSheet = designSheet;
+                    char.avatar = avatar;
+                    char.img = avatar;
+                    
+                    const card = document.getElementById(`char-card-${editingCharId}`);
+                    if (card) {
+                        card.querySelector('img').src = avatar;
+                        card.querySelector('.char-name-label').innerText = name;
+                    }
+                }
+            } else {
+                const id = Date.now();
+                const charData = { id, name, age, gender, species, otherTraits, desc, avatar, designSheet, img: avatar };
+                state.characters.push(charData);
+
+                const grid = document.getElementById('attachedCharacters');
+                const card = document.createElement('div');
+                card.id = `char-card-${id}`;
+                card.className = "relative w-16 h-16 rounded-2xl border-2 border-transparent bg-white p-0.5 flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden group shadow-sm char-card-selected";
+                // Auto-select on creation
+                state.selectedCharacters.push(charData);
+                
+                card.onclick = () => toggleCharacterSelection(card, charData);
+                
+                card.innerHTML = `
+                    <div class="check-badge absolute top-1 right-1 w-4 h-4 bg-purple-600 rounded-full flex items-center justify-center z-10">
+                        <i data-lucide="check" class="w-2.5 h-2.5 text-white"></i>
+                    </div>
+                    <img src="${avatar}" class="w-full h-full rounded-xl object-cover relative z-0">
+                    <div class="absolute bottom-0 inset-x-0 bg-black/50 backdrop-blur-sm p-0.5 text-center">
+                        <span class="char-name-label text-[8px] font-bold text-white uppercase truncate w-full block">${name}</span>
+                    </div>
+                `;
+                
+                const addButton = document.getElementById('addCharBtn');
+                if (addButton) {
+                    grid.insertBefore(card, addButton);
+                } else {
+                    grid.appendChild(card);
+                }
+            }
+            
+            lucide.createIcons();
+            if (keepOpen !== true) {
+            closeModal();
+            }
+            // Prevent form submission if somehow triggered
+            return false;
+        }
+        // ==========================================
+        // COMIC VIEWER LOGIC
+        // ==========================================
+
+        let currentViewerIndex = 0;
+
+        function openComicViewer(index) {
+            if (!window.generatedComicPages || window.generatedComicPages.length === 0) return;
+            currentViewerIndex = index;
+            document.getElementById('comicViewerOverlay').classList.remove('hidden');
+            updateComicViewer();
+        }
+
+        function closeComicViewer() {
+            document.getElementById('comicViewerOverlay').classList.add('hidden');
+        }
+
+        function nextComicPage() {
+            if (currentViewerIndex < window.generatedComicPages.length - 1) {
+                currentViewerIndex++;
+                updateComicViewer();
+            }
+        }
+
+        function prevComicPage() {
+            if (currentViewerIndex > 0) {
+                currentViewerIndex--;
+                updateComicViewer();
+            }
+        }
+
+        function updateComicViewer() {
+            const page = window.generatedComicPages[currentViewerIndex];
+            const img = document.getElementById('comicViewerImg');
+            const storyArea = document.getElementById('viewerPageStory');
+            const dialogueArea = document.getElementById('viewerPageDialogue');
+            const layoutArea = document.getElementById('viewerPageLayout');
+            const panelCountInput = document.getElementById('viewerPagePanelCount');
+            const indicator = document.getElementById('comicPageIndicator');
+            
+            img.src = page.imgData || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle">Error / Generating</text></svg>';
+            storyArea.value = page.page_story || '';
+            dialogueArea.value = page.dialogue || '';
+            layoutArea.value = page.layout_logic || '';
+            panelCountInput.value = page.panel_count || 1;
+            
+            indicator.innerText = `第 ${page.page_number} / ${window.generatedComicPages.length} 页`;
+            
+            document.getElementById('prevPageBtn').disabled = currentViewerIndex === 0;
+            document.getElementById('nextPageBtn').disabled = currentViewerIndex === window.generatedComicPages.length - 1;
+        }
+
+        function downloadCurrentPage() {
+            const page = window.generatedComicPages[currentViewerIndex];
+            if (!page || !page.imgData) return alert("No image available to download.");
+            const link = document.createElement('a');
+            link.download = `comic_page_${page.page_number}.png`;
+            link.href = page.imgData;
+            link.click();
+        }
+
+        function downloadAllPages() {
+            if (!window.generatedComicPages || window.generatedComicPages.length === 0) return;
+            window.generatedComicPages.forEach((page, idx) => {
+                if (page.imgData) {
+                    setTimeout(() => {
+                        const link = document.createElement('a');
+                        link.download = `comic_page_${page.page_number}.png`;
+                        link.href = page.imgData;
+                        link.click();
+                    }, idx * 500);
+                }
+            });
+            alert("Downloading all pages sequentially...");
+        }
+
+        async function regenerateCurrentPage() {
+            const page = window.generatedComicPages[currentViewerIndex];
+            if (!page) return;
+
+            // Sync user manual edits back to the object
+            page.page_story = document.getElementById('viewerPageStory').value;
+            page.dialogue = document.getElementById('viewerPageDialogue').value;
+            page.layout_logic = document.getElementById('viewerPageLayout').value;
+            page.panel_count = parseInt(document.getElementById('viewerPagePanelCount').value, 10);
+
+            const rawStyleOption = document.getElementById('artStyleSelect').value;
+            let style = rawStyleOption;
+            if (rawStyleOption === 'auto') {
+                const expandedStory = state.expandedStory;
+                if (expandedStory) {
+                    const autoStyle = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.STYLE_AUTO_MATCH, `Story:\n${expandedStory}`);
+                    style = autoStyle || "Japanese manga style";
+                } else {
+                    style = "Japanese manga style";
+                }
+            } else if (rawStyleOption === 'custom') {
+                style = document.getElementById('customStyleText').value || "Professional comic style";
+            }
+            const isCustomStyleWithImage = rawStyleOption === 'custom' && customStyleImageBase64;
+
+            const ratio = document.getElementById('aspectRatioSelect').value;
+            const apiKey = getApiKey();
+            if (!apiKey) return;
+            
+            // For continuity, we try to grab the previous panel's data
+            let previousPanelData = null;
+            if (currentViewerIndex > 0) {
+                const prevPage = window.generatedComicPages[currentViewerIndex - 1];
+                if (prevPage && prevPage.rawData) {
+                    previousPanelData = prevPage.rawData;
+                }
+            }
+
+            const btn = document.getElementById('viewerRegenBtn');
+            const originalBtnHtml = btn.innerHTML;
+            btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 重新生成中...';
+            btn.disabled = true;
+            lucide.createIcons();
+            
+            const imgEl = document.getElementById('comicViewerImg');
+            imgEl.style.opacity = '0.5';
+
+            let charContextText = "CRITICAL CHARACTER REFERENCES:\\n";
+            let inlineDataParts = [];
+            state.selectedCharacters.slice(0, 5).forEach((char, index) => {
+                charContextText += `- Character Name: "${char.name}". This is Reference Image ${index + 1}. You MUST strictly copy their exact facial features, hair, clothing, etc.\\n`;
+                let mimeType = "image/jpeg";
+                let base64Data = "";
+                if (char.avatar && char.avatar.startsWith('data:')) {
+                    const parts = char.avatar.split(',');
+                    mimeType = parts[0].split(':')[1].split(';')[0];
+                    base64Data = parts[1];
+                    inlineDataParts.push({ inlineData: { mimeType: mimeType, data: base64Data } });
+                }
+            });
+
+            const scenePrompt = `[CHARACTER REFERENCES]
+${charContextText}
+[ART STYLE OVERRIDE]
+Render in style: ${style}.
+NO WATERMARKS, NO SIGNATURES, NO LOGOS.
+[PAGE INSTRUCTIONS]
+Page ${page.page_number}.
+Action & Environment: ${page.page_story}
+Dialogue (draw speech bubbles): "${page.dialogue || "None"}"
+Panel Count: ${page.panel_count}
+Layout Logic: ${page.layout_logic}`;
+
+            let requestParts = [{ text: SYSTEM_PROMPTS.COMIC_RENDER + "\n\n" + scenePrompt }];
+            if (isCustomStyleWithImage) {
+                requestParts.push({ text: "Use the following image as a STRICT GLOBAL ART STYLE AND COLOR REFERENCE. Do NOT copy the action, ONLY art style and rendering technique:" });
+                requestParts.push({ inlineData: { mimeType: customStyleImageMimeType, data: customStyleImageBase64 } });
+            }
+            if (previousPanelData) {
+                requestParts.push({ text: "Use the following image as a STRICT STYLE AND ATMOSPHERE REFERENCE for continuity. Do NOT copy the action, ONLY art style:" });
+                requestParts.push({ inlineData: { mimeType: previousPanelData.mimeType, data: previousPanelData.data } });
+            }
+            requestParts = requestParts.concat(inlineDataParts);
+
+            try {
+                const selectedImageModel = document.getElementById('imageModelSelect').value || MODELS.IMAGE;
+                const imgUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedImageModel}:generateContent?key=${apiKey}`;
+                const imgRes = await fetch(imgUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ parts: requestParts }],
+                        generationConfig: {
+                            responseModalities: ["IMAGE"],
+                            imageConfig: { aspectRatio: ratio }
+                        }
+                    })
+                });
+                const imgData = await imgRes.json();
+
+                if (imgData.candidates && imgData.candidates[0].content.parts) {
+                    for (const part of imgData.candidates[0].content.parts) {
+                        if (part.inlineData) {
+                            const base64Image = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                            page.imgData = base64Image;
+                            page.rawData = part.inlineData;
+                            imgEl.src = base64Image;
+                            
+                            // Also update it in the background grid
+                            const gridImages = document.querySelectorAll('#comicGrid img');
+                            if (gridImages[currentViewerIndex]) {
+                                gridImages[currentViewerIndex].src = base64Image;
+                            }
+                            
+                            // Create a new execution after regenerating this page
+                            const newExecution = {
+                                id: Date.now().toString(),
+                                label: `第 ${state.executions.length + 1} 次执行`,
+                                createdAt: new Date().toLocaleString(),
+                                pages: JSON.parse(JSON.stringify(window.generatedComicPages))
+                            };
+                            state.executions.unshift(newExecution);
+                            state.currentExecutionId = newExecution.id;
+                            renderExecutions();
+                            saveCurrentTask();
+                            renderTasks();
+                            
+                            break;
+                        }
+                    }
+                } else {
+                    alert("Failed to regenerate page: No image data returned.");
+                }
+            } catch (e) {
+                console.error("Regen Error:", e);
+                alert("Error regenerating page: " + e.message);
+            }
+
+            imgEl.style.opacity = '1';
+            btn.innerHTML = originalBtnHtml;
+            btn.disabled = false;
+            lucide.createIcons();
+        }
+
+        // --- Layout UI Helpers ---
+        // --- Floating Input Box Helpers ---
+        function toggleInputHeight() {
+            const input = document.getElementById('storyInput');
+            const icon = document.getElementById('expandIcon');
+            if (input.classList.contains('h-12')) {
+                input.classList.remove('h-12');
+                input.classList.add('h-64');
+                icon.setAttribute('data-lucide', 'minimize-2');
+            } else {
+                input.classList.remove('h-64');
+                input.classList.add('h-12');
+                icon.setAttribute('data-lucide', 'maximize-2');
+            }
+            lucide.createIcons();
+        }
+
+        function toggleExpansionVisual(checkbox) {
+            const bg = document.getElementById('expansionToggleBg');
+            const dot = document.getElementById('expansionToggleDot');
+            if (checkbox.checked) {
+                bg.classList.remove('bg-gray-200');
+                bg.classList.add('bg-purple-600');
+                dot.classList.add('translate-x-3');
+            } else {
+                bg.classList.remove('bg-purple-600');
+                bg.classList.add('bg-gray-200');
+                dot.classList.remove('translate-x-3');
+            }
+        }
+
+        let activeDropdowns = [];
+
+        function toggleDropdown(id) {
+            const dropdown = document.getElementById(id);
+            
+            // 如果点击的是子菜单（如 styleDropdown 或 modelDropdown）
+            if (id === 'styleDropdown' || id === 'modelDropdown') {
+                // 关闭其他同级子菜单
+                if (id === 'styleDropdown') document.getElementById('modelDropdown').classList.add('hidden');
+                if (id === 'modelDropdown') document.getElementById('styleDropdown').classList.add('hidden');
+            } else {
+                // 这是一个主菜单（如 ratio, page, settings）
+                activeDropdowns.forEach(d => {
+                    if (d !== dropdown) d.classList.add('hidden');
+                });
+                activeDropdowns = [];
+            }
+
+            if (dropdown.classList.contains('hidden')) {
+                dropdown.classList.remove('hidden');
+                if (!activeDropdowns.includes(dropdown)) activeDropdowns.push(dropdown);
+            } else {
+                dropdown.classList.add('hidden');
+                activeDropdowns = activeDropdowns.filter(d => d !== dropdown);
+            }
+        }
+
+        document.addEventListener('click', (e) => {
+            if (activeDropdowns.length > 0 && 
+                !e.target.closest('#ratioDropdownContainer') && 
+                !e.target.closest('#pageDropdownContainer') && 
+                !e.target.closest('#settingsDropdownContainer') && 
+                !e.target.closest('button[onclick^="toggleDropdown"]')) {
+                activeDropdowns.forEach(d => d.classList.add('hidden'));
+                activeDropdowns = [];
+                // 确保子菜单也关闭
+                document.getElementById('styleDropdown')?.classList.add('hidden');
+                document.getElementById('modelDropdown')?.classList.add('hidden');
+            }
+        });
+
+        function selectRatio(value) {
+            document.getElementById('aspectRatioSelect').value = value;
+            document.getElementById('ratioBtnText').innerText = value;
+            document.getElementById('ratioDropdown').classList.add('hidden');
+            activeDropdowns = activeDropdowns.filter(d => d.id !== 'ratioDropdown');
+            saveStateToLocal();
+        }
+
+        function selectPage(value) {
+            document.getElementById('pageSelect').value = value;
+            document.getElementById('pageBtnText').innerText = `x${value}`;
+            document.getElementById('pageDropdown').classList.add('hidden');
+            activeDropdowns = activeDropdowns.filter(d => d.id !== 'pageDropdown');
+            saveStateToLocal();
+        }
+
+        function selectStyle(value, label) {
+            document.getElementById('artStyleSelect').value = value;
+            document.getElementById('styleBtnText').innerText = label;
+            document.getElementById('styleDropdown').classList.add('hidden');
+            activeDropdowns = activeDropdowns.filter(d => d.id !== 'styleDropdown');
+            saveStateToLocal();
+        }
+
+        function selectModel(value, label) {
+            document.getElementById('imageModelSelect').value = value;
+            document.getElementById('modelBtnText').innerText = label;
+            document.getElementById('modelDropdown').classList.add('hidden');
+            activeDropdowns = activeDropdowns.filter(d => d.id !== 'modelDropdown');
+        }
+
+        let customStyleCount = 0;
+        
+        function syncDropdownUI() {
+            const ratioSelect = document.getElementById('aspectRatioSelect');
+            const pageSelect = document.getElementById('pageSelect');
+            const styleSelect = document.getElementById('artStyleSelect');
+            const modelSelect = document.getElementById('imageModelSelect');
+            
+            if(ratioSelect && document.getElementById('ratioBtnText')) {
+                const ratioText = ratioSelect.options[ratioSelect.selectedIndex]?.text || ratioSelect.value;
+                document.getElementById('ratioBtnText').innerText = ratioSelect.value;
+            }
+            if(pageSelect && document.getElementById('pageBtnText')) {
+                document.getElementById('pageBtnText').innerText = `x${pageSelect.value}`;
+            }
+            if(styleSelect && document.getElementById('styleBtnText')) {
+                const styleText = styleSelect.options[styleSelect.selectedIndex]?.text || "自定义画风";
+                document.getElementById('styleBtnText').innerText = styleText;
+            }
+            if(modelSelect && document.getElementById('modelBtnText')) {
+                const modelText = modelSelect.options[modelSelect.selectedIndex]?.text || modelSelect.value;
+                document.getElementById('modelBtnText').innerText = modelText;
+            }
+        }
+
+        function openCustomStyleModal() {
+            document.getElementById('styleDropdown').classList.add('hidden');
+            document.getElementById('settingsDropdown').classList.add('hidden');
+            activeDropdowns = [];
+            document.getElementById('customStyleModal').classList.remove('hidden');
+            document.getElementById('customStyleText').value = '';
+            removeCustomStyleImage();
+        }
+
+        function closeCustomStyleModal() {
+            document.getElementById('customStyleModal').classList.add('hidden');
+        }
+
+        function saveCustomStyle() {
+            const text = document.getElementById('customStyleText').value.trim();
+            if (!text && !customStyleImageBase64) {
+                alert("请填写画风描述或上传参考图片");
+                return;
+            }
+            customStyleCount++;
+            const styleLabel = `自定义画风 ${customStyleCount}`;
+            const optionValue = text ? text : 'custom_image_only';
+            
+            const select = document.getElementById('artStyleSelect');
+            const option = document.createElement('option');
+            option.value = optionValue;
+            option.text = styleLabel;
+            select.appendChild(option);
+            
+            const dropdown = document.getElementById('styleDropdown');
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600 truncate';
+            btn.innerText = styleLabel;
+            btn.onclick = () => selectStyle(optionValue, styleLabel);
+            
+            const divider = dropdown.querySelector('.h-px');
+            if (divider) {
+                dropdown.insertBefore(btn, divider);
+            } else {
+                dropdown.appendChild(btn);
+            }
+
+            selectStyle(optionValue, styleLabel);
+            closeCustomStyleModal();
+        }
+
+        // --- Task Management ---
+        function saveCurrentTask() {
+            if (!state.currentTaskId) return;
+            let task = state.tasks.find(t => t.id === state.currentTaskId);
+            if (!task) {
+                task = { id: state.currentTaskId, createdAt: new Date().toLocaleString() };
+                state.tasks.push(task);
+            }
+            
+            const storyText = document.getElementById('storyInput').value.trim();
+            let shortTitle = "Draft Task";
+            if (storyText) {
+                shortTitle = storyText.split(/[,.，。！?！\n]/)[0].substring(0, 10);
+                if (storyText.length > 10) shortTitle += "...";
+            }
+            task.title = shortTitle;
+            
+            task.characters = [...state.characters];
+            task.selectedCharacters = [...state.selectedCharacters];
+            task.pages = document.getElementById('pageSelect').value;
+            task.ratio = document.getElementById('aspectRatioSelect').value;
+            task.style = document.getElementById('artStyleSelect').value;
+            task.originalStory = storyText;
+            task.expandedStory = state.expandedStory;
+            task.hasGeneratedOnce = state.hasGeneratedOnce;
+            task.executions = [...state.executions];
+            task.generatedComicPages = state.generatedComicPages ? JSON.parse(JSON.stringify(state.generatedComicPages)) : null;
+        }
+
+        function renderTasks() {
+            const container = document.getElementById('dynamicTasksContainer');
+            if (!container) return;
+            let html = '';
+            
+            const sortedTasks = [...state.tasks].reverse();
+            
+            sortedTasks.forEach(task => {
+                const isActive = task.id === state.currentTaskId;
+                let statusText = task.hasGeneratedOnce ? "Completed" : "Editing...";
+                let statusColor = task.hasGeneratedOnce ? "text-green-500" : "text-purple-600";
+                let iconColor = task.hasGeneratedOnce ? "text-green-600 bg-green-50" : "text-purple-600 bg-purple-50";
+                let iconHtml = `<i data-lucide="sparkles" class="w-5 h-5"></i>`;
+                
+                if (task.isGenerating) {
+                    statusText = "Generating...";
+                    statusColor = "text-purple-600";
+                    iconColor = "text-purple-600 bg-purple-50";
+                    iconHtml = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i>`;
+                }
+                
+                html += `
+                    <div onclick="switchTask('${task.id}')" class="p-4 rounded-xl bg-white border ${isActive ? 'border-purple-400 shadow-md' : 'border-gray-100 shadow-sm'} hover:border-purple-200 cursor-pointer relative overflow-hidden group transition-all">
+                        ${isActive ? '<div class="absolute left-0 top-0 bottom-0 w-1 bg-purple-500"></div>' : ''}
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-lg ${iconColor} flex items-center justify-center shrink-0">
+                                ${iconHtml}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <h4 class="text-sm font-bold text-gray-900 truncate">${task.title || 'Draft Task'}</h4>
+                                <p class="text-[11px] ${statusColor} font-medium">${statusText}</p>
+                            </div>
+                            <button onclick="event.stopPropagation(); deleteTask('${task.id}')" class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all shrink-0 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        function deleteTask(taskId) {
+            if (!confirm("确定要删除这个任务吗？")) return;
+            
+            const taskIndex = state.tasks.findIndex(t => t.id === taskId);
+            if (taskIndex === -1) return;
+            
+            state.tasks.splice(taskIndex, 1);
+            
+            if (state.currentTaskId === taskId) {
+                if (state.tasks.length > 0) {
+                    // Switch to the most recent available task
+                    const nextTaskId = state.tasks[state.tasks.length - 1].id;
+                    state.currentTaskId = null; // force reload
+                    switchTask(nextTaskId);
+                } else {
+                    // No tasks left, create a new empty one
+                    createNewTask();
+                }
+            } else {
+                // Just render the list if we deleted a background task
+                renderTasks();
+            }
+            saveStateToLocal();
+        }
+
+        function switchTask(taskId) {
+            if (taskId === state.currentTaskId) {
+                return;
+            }
+            saveCurrentTask();
+            const task = state.tasks.find(t => t.id === taskId);
+            if (!task) return;
+            
+            state.currentTaskId = taskId;
+            state.characters = [...(task.characters || [])];
+            state.selectedCharacters = [...(task.selectedCharacters || [])];
+            state.expandedStory = task.expandedStory || "";
+            state.hasGeneratedOnce = !!task.hasGeneratedOnce;
+            state.executions = [...(task.executions || [])];
+            state.currentExecutionId = state.executions.length > 0 ? state.executions[0].id : null;
+            state.generatedComicPages = task.generatedComicPages ? JSON.parse(JSON.stringify(task.generatedComicPages)) : null;
+            window.generatedComicPages = state.generatedComicPages;
+            
+            document.getElementById('storyInput').value = task.originalStory || "";
+            document.getElementById('pageSelect').value = task.pages || "5";
+            document.getElementById('aspectRatioSelect').value = task.ratio || "3:4";
+            
+            // Check if the saved style exists in the options, if not, add it as custom
+            const styleSelect = document.getElementById('artStyleSelect');
+            const savedStyle = task.style || "auto";
+            let styleExists = Array.from(styleSelect.options).some(opt => opt.value === savedStyle);
+            if (!styleExists && savedStyle !== "auto") {
+                const option = document.createElement('option');
+                option.value = savedStyle;
+                option.text = "自定义画风";
+                styleSelect.appendChild(option);
+            }
+            styleSelect.value = savedStyle;
+            
+            syncDropdownUI();
+            
+            document.getElementById('attachedCharacters').innerHTML = `
+                <button type="button" id="addCharBtn" onclick="openModal()" class="w-16 h-16 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-600 transition-colors">
+                    <i data-lucide="plus" class="w-5 h-5 mb-1"></i>
+                    <span class="text-[9px] font-bold uppercase tracking-wider">角色</span>
+                </button>
+            `;
+            state.characters.forEach(char => {
+                const isSelected = state.selectedCharacters.some(c => c.id === char.id);
+                renderCharacterCard(char, isSelected);
+            });
+            
+            const btn = document.getElementById('oneClickGenerateBtn');
+            const status = document.getElementById('agentStatus');
+            if (task.isGenerating) {
+                btn.disabled = true;
+                btn.classList.add('opacity-50');
+                btn.innerHTML = `<span>生成中...</span><i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>`;
+                status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 后台正在生成中...</span>`;
+            } else {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+                if (state.hasGeneratedOnce) {
+                    btn.innerHTML = `<span>修改故事/漫画</span><i data-lucide="edit-3" class="w-4 h-4"></i>`;
+                } else {
+                    btn.innerHTML = `<span>一键生成漫画</span><i data-lucide="sparkles" class="w-4 h-4"></i>`;
+                }
+                status.innerHTML = '';
+            }
+            
+            const grid = document.getElementById('comicGrid');
+            grid.innerHTML = '';
+            renderExecutions();
+            
+            if (state.executions && state.executions.length > 0) {
+                document.getElementById('welcomeState').classList.add('hidden');
+                document.getElementById('expandedStoryBox').classList.add('hidden');
+                document.getElementById('comicResultBox').classList.remove('hidden');
+                document.getElementById('comicWrapper').classList.remove('hidden');
+                document.getElementById('downloadFullComicBtn').classList.remove('hidden');
+                document.getElementById('downloadZipBtn').classList.remove('hidden');
+                
+                const latestExec = state.executions[0];
+                window.generatedComicPages = JSON.parse(JSON.stringify(latestExec.pages));
+                state.generatedComicPages = window.generatedComicPages;
+                
+                let styleRatio = "1/1";
+                const ratio = task.ratio || "3:4";
+                if (ratio === "16:9") styleRatio = "16/9";
+                else if (ratio === "9:16") styleRatio = "9/16";
+                else if (ratio === "4:5") styleRatio = "4/5";
+                else if (ratio === "3:4") styleRatio = "3/4";
+
+                latestExec.pages.forEach((page, i) => {
+                    if (page.imgData) {
+                        const imgContainer = document.createElement('div');
+                        imgContainer.className = `relative border-[3px] border-black bg-white flex flex-col group overflow-hidden w-full shrink-0 grow-0`;
+                        imgContainer.style.aspectRatio = styleRatio;
+                        imgContainer.innerHTML = `
+                            <img src="${page.imgData}" class="w-full h-full object-cover block cursor-pointer" onclick="openComicViewer(${i})">
+                            <div class="absolute top-2 left-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded font-bold">PAGE ${page.page_number}</div>
+                            <button class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-bold text-sm" onclick="openComicViewer(${i})">点击进入阅读模式</button>
+                        `;
+                        grid.appendChild(imgContainer);
+                    }
+                });
+            } else {
+                document.getElementById('welcomeState').classList.remove('hidden');
+                document.getElementById('expandedStoryBox').classList.add('hidden');
+                document.getElementById('comicResultBox').classList.add('hidden');
+            }
+            
+            renderTasks();
+            lucide.createIcons();
+            
+            const drawer = document.getElementById('configDrawer');
+            drawer.classList.remove('-translate-x-full');
+            drawer.classList.add('translate-x-0');
+        }
+
+        function createNewTask() {
+            saveCurrentTask();
+            
+            const newTaskId = Date.now().toString();
+            const newTask = {
+                id: newTaskId,
+                title: "Draft Task",
+                createdAt: new Date().toLocaleString(),
+                hasGeneratedOnce: false,
+                executions: [],
+                characters: [],
+                selectedCharacters: [],
+                pages: "5",
+                ratio: "3:4",
+                style: "auto",
+                originalStory: "",
+                expandedStory: "",
+                generatedComicPages: null
+            };
+            state.tasks.push(newTask);
+            
+            // Only if switchTask wasn't modified to do this directly... wait, we can just call switchTask now, BUT switchTask needs the new task to be in `state.tasks`.
+            // Wait, to force it to "switch" and clear out the old active state, we can temporarily clear `state.currentTaskId`
+            const oldTaskId = state.currentTaskId;
+            state.currentTaskId = null; // force reload UI
+            switchTask(newTaskId);
+        }
+
+    </script>
+</body>
+</html>
