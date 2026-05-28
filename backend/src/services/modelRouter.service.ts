@@ -8,8 +8,8 @@ import type { ImageGenerationResult, ImagePromptPart, ModelMessage, TextGenerati
 export class ModelRouterService {
   getDefaultModelKeys() {
     return {
-      defaultTextModelKey: process.env.DEFAULT_TEXT_MODEL_KEY || "openai.gpt-5.5",
-      defaultImageModelKey: process.env.DEFAULT_IMAGE_MODEL_KEY || "atlas.openai-gpt-image-2"
+      defaultTextModelKey: process.env.DEFAULT_TEXT_MODEL_KEY || "google.gemini-3.1-flash-lite",
+      defaultImageModelKey: process.env.DEFAULT_IMAGE_MODEL_KEY || "google.gemini-3-pro-image-preview"
     };
   }
 

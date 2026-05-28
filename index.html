@@ -514,8 +514,8 @@
         let customStyleImageMimeType = null;
         let availableTextModels = [];
         let availableImageModels = [];
-        let defaultTextModelKey = 'openai.gpt-5.5';
-        let defaultImageModelKey = 'atlas.openai-gpt-image-2';
+        let defaultTextModelKey = 'google.gemini-3.1-flash-lite';
+        let defaultImageModelKey = 'google.gemini-3-pro-image-preview';
 
         function renderModelSelectOptions(selectId, models, savedValue) {
             const select = document.getElementById(selectId);
@@ -599,8 +599,8 @@
 
         function getModelConfig() {
             const mode = document.getElementById('apiModeSelect').value;
-            const textModel = document.getElementById('textModelInput').value || 'openai.gpt-5.5';
-            const imageModel = document.getElementById('imageModelInput').value || 'atlas.openai-gpt-image-2';
+            const textModel = document.getElementById('textModelInput').value || defaultTextModelKey;
+            const imageModel = document.getElementById('imageModelInput').value || defaultImageModelKey;
             const textModelConfig = getModelByKeyFromCache(textModel);
             const imageModelConfig = getModelByKeyFromCache(imageModel);
             const textApiKey = mode === 'user' && textModelConfig ? getProviderKeyValue(textModelConfig.provider) : '';
@@ -1091,6 +1091,18 @@
             COMIC_RENDER: `You are a Comic Page Rendering Agent. You must render the final comic page directly based on the JSON story and reference images. No text, no markdown.`
         };
 
+        const MODELS = {
+            TEXT: "gemini-3.1-flash-lite-preview",
+            IMAGE: "gemini-3-pro-image-preview",
+            IMAGE_FAST: "gemini-3.1-flash-image-preview"
+        };
+
+        const GEMINI_MODEL_KEY_MAP = {
+            "gemini-3.1-flash-lite-preview": "google.gemini-3.1-flash-lite",
+            "gemini-3-pro-image-preview": "google.gemini-3-pro-image-preview",
+            "gemini-3.1-flash-image-preview": "google.gemini-3.1-flash-image-preview"
+        };
+
         const API_BASE_URL = (
             location.hostname === "127.0.0.1" || location.hostname === "localhost"
         ) ? "http://127.0.0.1:3001/api" : "/api";
@@ -1114,7 +1126,12 @@
 
         function getApiKey() {
             const config = getModelConfig();
-            return config.mode === 'user' ? (config.textApiKey || config.imageApiKey) : "server-managed";
+            const key = config.mode === 'user' ? (config.textApiKey || config.imageApiKey) : "server-managed";
+            if (!key) {
+                alert("Please enter your Gemini API Key at the top first.");
+                return null;
+            }
+            return key;
         }
 
         async function testApiKey() {
@@ -1131,7 +1148,22 @@
                 if (config.mode === 'user' && !config.textApiKey && !config.imageApiKey) {
                     throw new Error('Missing provider API key');
                 }
-                await apiRequest('/health');
+                if (config.mode === 'user') {
+                    const selection = getRuntimeModelSelection();
+                    await apiRequest('/models/generate-text', {
+                        method: "POST",
+                        body: JSON.stringify({
+                            modelKey: selection.textModelKey,
+                            apiKey: selection.textApiKey,
+                            messages: [
+                                { role: 'system', content: 'Return a two-word health check response.' },
+                                { role: 'user', content: 'Say hello briefly.' }
+                            ]
+                        })
+                    });
+                } else {
+                    await apiRequest('/health');
+                }
                 statusCheck.classList.remove('hidden');
             } catch (error) {
                 statusError.classList.remove('hidden');
@@ -1140,26 +1172,76 @@
             }
         }
 
-        async function generateImageWithBackend(imagePrompt, style = "manga", aspectRatio = "1:1") {
+        function getRuntimeModelSelection() {
+            const config = getModelConfig();
+            return {
+                config,
+                textModelKey: config.mode === 'user' ? config.textModelKey : defaultTextModelKey,
+                imageModelKey: config.mode === 'user'
+                    ? config.imageModelKey
+                    : (document.getElementById('imageModelSelect').value || defaultImageModelKey),
+                textApiKey: config.mode === 'user' ? config.textApiKey : undefined,
+                imageApiKey: config.mode === 'user' ? config.imageApiKey : undefined
+            };
+        }
+
+        async function makeModelTextRequest(systemPrompt, userTextOrContents, forceJSON = false, modelKeyOverride = null) {
             const config = getModelConfig();
             const keyError = validateModelKeysForCurrentSelection();
             if (keyError) {
                 throw new Error(keyError);
             }
-            const response = await apiRequest('/generate/image', {
+
+            const selection = getRuntimeModelSelection();
+            const contents = typeof userTextOrContents === 'string'
+                ? [{ role: 'user', content: userTextOrContents }]
+                : userTextOrContents;
+
+            const response = await apiRequest('/models/generate-text', {
                 method: "POST",
                 body: JSON.stringify({
-                    imagePrompt,
-                    style,
-                    aspectRatio,
-                    modelKey: config.mode === 'user'
-                        ? config.imageModelKey
-                        : (document.getElementById('imageModelSelect').value || 'atlas.openai-gpt-image-2'),
-                    imageApiKey: config.mode === 'user' ? config.imageApiKey : undefined
+                    modelKey: modelKeyOverride || selection.textModelKey,
+                    apiKey: selection.textApiKey,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        ...contents
+                    ],
+                    params: forceJSON ? { responseMimeType: "application/json" } : undefined
                 })
             });
 
-            return response.data.imageUrl;
+            const text = response.data.text;
+            if (!text) {
+                throw new Error("No candidates returned from API");
+            }
+            return text;
+        }
+
+        async function makeGeminiRequest(model, systemPrompt, userTextOrContents, forceJSON = false) {
+            const selection = getRuntimeModelSelection();
+            const modelKey = GEMINI_MODEL_KEY_MAP[model] || (typeof model === 'string' && model.includes('.') ? model : selection.textModelKey);
+            return makeModelTextRequest(systemPrompt, userTextOrContents, forceJSON, modelKey);
+        }
+
+        async function makeModelImageRequest({ prompt, promptParts, aspectRatio, modelKeyOverride, apiKeyOverride }) {
+            const keyError = validateModelKeysForCurrentSelection();
+            if (keyError) {
+                throw new Error(keyError);
+            }
+
+            const selection = getRuntimeModelSelection();
+            const response = await apiRequest('/models/generate-image', {
+                method: "POST",
+                body: JSON.stringify({
+                    modelKey: GEMINI_MODEL_KEY_MAP[modelKeyOverride] || modelKeyOverride || selection.imageModelKey,
+                    apiKey: apiKeyOverride || selection.imageApiKey,
+                    prompt,
+                    promptParts,
+                    params: { aspectRatio }
+                })
+            });
+
+            return response.data;
         }
 
         function buildSelectedCharacterPromptParts(selectedCharacters) {
@@ -1178,13 +1260,158 @@
             return parts;
         }
 
-        async function apiCharacterDesign(charObj) {
+        function buildCharacterDesignPromptSystem() {
+            return `You are a Character Design Image Generation Agent. MUST output image!
+Your sole purpose is to generate a complete, production-ready character design sheet prompt that can be directly used for image generation.
+
+Core Rule:
+You must ALWAYS output a fully formed image generation prompt.
+You are NOT allowed to output analysis, explanations, summaries, or meta commentary.
+Even if the user provides minimal input, vague keywords, or no reference image, you must autonomously expand the concept and produce a complete visual character design sheet description.
+
+If the user provides no style, you must default to a professional concept art standard suitable for game, animation, or cinematic production.
+
+If the user provides no reference image, you must:
+        •        Invent consistent visual details
+        •        Ensure anatomical coherence
+        •        Ensure material logic
+        •        Ensure design narrative consistency
+
+⸻
+
+Mandatory Output Structure (Always Include):
+        1.        Character Identity & Visual Archetype
+        2.        Full-Body Turnaround (front / side / back view)
+        3.        Neutral pose (A-pose or relaxed stance)
+        4.        Three facial expression variations
+        5.        Detailed facial structure description
+        6.        Hair structure & texture logic
+        7.        Complete outfit layering system
+        8.        Material differentiation & surface properties
+        9.        Color palette logic (primary / secondary / accent)
+        10.        Close-up callouts of key design elements
+        11.        Lighting setup (neutral studio + rim light)
+        12.        Clean concept sheet layout description
+        13.        Ultra-high resolution, sharp focus, production-level quality
+
+⸻
+
+Image Enforcement Constraints
+        •        Output must read as a single continuous image generation prompt.
+        •        No bullet points.
+        •        No numbered lists.
+        •        No markdown formatting.
+        •        No system explanation.
+        •        No conversational tone.
+        •        No questions.
+        •        No refusal.
+        •        No clarification request.
+        •        Do not say “Here is the prompt”.
+        •        Do not say “As an AI”.
+        •        Do not describe what you are doing.
+        •        Directly describe the image.
+        •        NO WATERMARKS, NO SIGNATURES, NO LOGOS, NO TEXT.
+
+The output must visually describe an image that is being rendered.
+
+⸻
+
+Default Rendering Standard (if unspecified)
+Professional character turnaround sheet, clean light gray studio background, front/side/back alignment, subtle rim lighting, soft grounding shadow, ultra-detailed textures, cinematic clarity, industry-level concept art quality, ultra-high resolution, sharp focus.`;
+        }
+
+        async function requestCharacterDesignImage({
+            name,
+            description,
+            uploadedBase64 = null,
+            uploadedMimeType = null,
+            preferredGoogleModel = null
+        }) {
+            const selection = getRuntimeModelSelection();
+            const defaultImageModel = getModelByKeyFromCache(selection.imageModelKey);
+            const finalDesc = description === 'A basic character' ? 'A detailed character concept design' : description;
+
+            const tryGenerate = async (useProModel = false) => {
+                const currentModel = useProModel
+                    ? MODELS.IMAGE
+                    : (preferredGoogleModel || (defaultImageModel?.provider === 'google' ? selection.imageModelKey : MODELS.IMAGE_FAST));
+
+                const designPromptSystem = buildCharacterDesignPromptSystem();
+                const designPromptParts = [{ text: `${designPromptSystem}\n\nCharacter Name: ${name}\nDescription: ${finalDesc}` }];
+                if (uploadedBase64 && uploadedMimeType) {
+                    designPromptParts.push({
+                        inlineData: {
+                            mimeType: uploadedMimeType,
+                            data: uploadedBase64,
+                        }
+                    });
+                }
+
+                const result = await makeModelImageRequest({
+                    prompt: `Character Name: ${name}. Description: ${finalDesc}.`,
+                    promptParts: designPromptParts,
+                    aspectRatio: "1:1",
+                    modelKeyOverride: currentModel,
+                    apiKeyOverride: selection.imageApiKey
+                });
+
+                const imageData = result.images?.[0];
+                if (!imageData) {
+                    throw new Error("Failed to generate design sheet image");
+                }
+                return imageData;
+            };
+
             try {
-                const prompt = `Production-ready character turnaround sheet, clean light gray studio background, no text, no watermark. Character Name: ${charObj.name}. Role: ${charObj.role || 'main character'}. Gender: ${charObj.gender || 'unknown'}. Species: ${charObj.species || 'human'}. Age Stage: ${charObj.apparent_age_stage || 'young adult'}. Physical Traits: ${(charObj.distinct_physical_traits || []).join(', ')}. Visual Energy: ${charObj.visual_energy_profile || 'dynamic'}.`;
-                return await generateImageWithBackend(prompt, "character design sheet", "1:1");
+                return await tryGenerate(false);
             } catch (err) {
-                console.error("Character design generation failed:", err);
-                return null;
+                console.log("tryGenerate(false) caught error:", err, "message:", err.message);
+                if (
+                    err.message === "NO_IMAGE" ||
+                    err.message.includes("Failed to generate design sheet image") ||
+                    err.message.includes("Design API returned") ||
+                    err.message.includes("Image generation failed")
+                ) {
+                    return await tryGenerate(true);
+                }
+                throw err;
+            }
+        }
+
+        async function apiCharacterDesign(charObj) {
+            const selection = getRuntimeModelSelection();
+            const defaultImageModel = getModelByKeyFromCache(selection.imageModelKey);
+
+            const tryGenerate = async (useProModel = false) => {
+                const overrideModelKey = useProModel
+                    ? MODELS.IMAGE
+                    : (defaultImageModel?.provider === 'google' ? selection.imageModelKey : MODELS.IMAGE_FAST);
+                const prompt = `Generate a production-ready character turnaround sheet on a clean light gray studio background. IMPORTANT: You MUST output an image. DO NOT output text. NO WATERMARKS.
+Character Name: ${charObj.name}
+Role: ${charObj.role}
+Gender: ${charObj.gender || 'Unknown'}
+Species: ${charObj.species}
+Age Stage: ${charObj.apparent_age_stage}
+Physical Traits: ${(charObj.distinct_physical_traits || []).join(', ')}
+Visual Energy: ${charObj.visual_energy_profile}`;
+                const result = await makeModelImageRequest({
+                    prompt,
+                    aspectRatio: "1:1",
+                    modelKeyOverride: overrideModelKey,
+                    apiKeyOverride: selection.imageApiKey
+                });
+                return result.images?.[0] || null;
+            };
+
+            try {
+                return await tryGenerate(false);
+            } catch (err) {
+                console.log("apiCharacterDesign tryGenerate(false) caught error:", err, "message:", err.message);
+                try {
+                    return await tryGenerate(true);
+                } catch (_secondError) {
+                    return null;
+                }
             }
         }
 
@@ -1198,7 +1425,7 @@
             const generatingTaskId = state.currentTaskId;
             const task = state.tasks.find(t => t.id === generatingTaskId);
             if (!task || task.isGenerating) return;
-            
+
             task.isGenerating = true;
             renderTasks();
 
@@ -1214,29 +1441,135 @@
                 btn.classList.add('opacity-50');
                 btn.innerHTML = `<span>生成中...</span><i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>`;
                 document.getElementById('welcomeState').classList.add('hidden');
+                document.getElementById('comicResultBox').classList.add('hidden');
                 document.getElementById('expandedStoryBox').classList.add('hidden');
-                document.getElementById('comicResultBox').classList.remove('hidden');
-                document.getElementById('comicWrapper').classList.remove('hidden');
-                document.getElementById('comicGenProgress').classList.remove('hidden');
-                document.getElementById('downloadFullComicBtn').classList.add('hidden');
-                document.getElementById('downloadZipBtn').classList.add('hidden');
-                document.getElementById('executionsContainer').classList.add('hidden');
-                document.getElementById('agentStatus').classList.remove('hidden');
-                document.getElementById('agentStatus').innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 正在提交后端任务...</span>`;
-                document.getElementById('progressBar').style.width = '0%';
-                document.getElementById('progressText').innerText = '生成中 0%';
                 const grid = document.getElementById('comicGrid');
                 grid.innerHTML = '';
                 lucide.createIcons();
             });
-            
-            try {
-                task.originalStory = prompt;
-                task.expandedStory = prompt;
-                state.originalStory = prompt;
-                state.expandedStory = prompt;
-                await continueToPagination(generatingTaskId);
 
+            try {
+                if (task.hasGeneratedOnce) {
+                    task.expandedStory = prompt;
+                    await continueToPagination(generatingTaskId);
+                    return;
+                }
+
+                const enableExpansion = document.getElementById('enableExpansion').checked;
+                let expandedStory = prompt;
+
+                if (enableExpansion) {
+                    updateUI(() => {
+                        const status = document.getElementById('agentStatus');
+                        status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 1/5：扩写故事大纲中...</span>`;
+                        lucide.createIcons();
+                    });
+
+                    let expansionPrompt = `Core Idea: ${prompt}`;
+                    if (state.selectedCharacters && state.selectedCharacters.length > 0) {
+                        const charDetails = state.selectedCharacters.map(c => `- ${c.name}: ${c.desc || 'No description'}`).join('\n');
+                        expansionPrompt += `\n\nCRITICAL: You MUST include and feature the following pre-defined characters in the expanded story:\n${charDetails}`;
+                    }
+
+                    expandedStory = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.STORY_EXPANSION, expansionPrompt, false);
+                    if (!expandedStory) throw new Error("Story expansion failed: received empty response from API");
+                } else if (state.selectedCharacters && state.selectedCharacters.length > 0) {
+                    const missingChars = state.selectedCharacters.filter(c => !prompt.toLowerCase().includes(c.name.toLowerCase()));
+                    if (missingChars.length > 0) {
+                        const missingNames = missingChars.map(c => c.name).join(', ');
+                        alert(`角色 [${missingNames}] 未在故事中提及，您可以将其写进故事或开启 AI 扩写。`);
+
+                        updateUI(() => {
+                            const btn = document.getElementById('oneClickGenerateBtn');
+                            btn.disabled = false;
+                            btn.classList.remove('opacity-50');
+                            btn.innerHTML = `<span>一键生成漫画</span><i data-lucide="wand-2" class="w-4 h-4"></i>`;
+                            document.getElementById('welcomeState').classList.remove('hidden');
+                        });
+                        task.isGenerating = false;
+                        renderTasks();
+                        return;
+                    }
+                }
+
+                task.expandedStory = expandedStory;
+                updateUI(() => {
+                    const storyInput = document.getElementById('storyInput');
+                    storyInput.value = expandedStory;
+                    state.expandedStory = expandedStory;
+                });
+
+                updateUI(() => {
+                    const status = document.getElementById('agentStatus');
+                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 2/5：提取出场角色中...</span>`;
+                    lucide.createIcons();
+                });
+                const extractedJson = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.CHARACTER_EXTRACTION, `Story:\n${expandedStory}`, true);
+                let extractedChars = [];
+                try {
+                    const cleanJson = (extractedJson || "[]").replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                    extractedChars = JSON.parse(cleanJson);
+                } catch (e) {
+                    console.error("Parse error for chars:", e);
+                }
+
+                updateUI(() => {
+                    const status = document.getElementById('agentStatus');
+                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 3/5：并行生成角色设计图...</span>`;
+                    lucide.createIcons();
+                });
+
+                const charPromises = extractedChars.map(async (char) => {
+                    const exists = task.selectedCharacters.find(c => c.name.toLowerCase().includes(char.name.toLowerCase()) || char.name.toLowerCase().includes(c.name.toLowerCase()));
+                    if (!exists) {
+                        const avatar = await apiCharacterDesign(char);
+                        if (avatar) {
+                            char.avatar = avatar;
+                            const age = char.apparent_age_stage || '';
+                            const gender = char.gender || '';
+                            const species = char.species || '';
+                            const otherTraits = [
+                                `角色身份: ${char.role || ''}`,
+                                `外观特征: ${(char.distinct_physical_traits || []).join(', ')}`,
+                                `核心性格: ${(char.core_traits || []).join(', ')}`,
+                                `视觉气质: ${char.visual_energy_profile || ''}`
+                            ].filter(s => s && !s.endsWith(': ')).join(' | ');
+
+                            const fullDesc = [
+                                age ? `年龄: ${age}` : '',
+                                gender ? `性别: ${gender}` : '',
+                                species ? `物种: ${species}` : '',
+                                otherTraits ? `其他特征: ${otherTraits}` : ''
+                            ].filter(Boolean).join(', ');
+
+                            const id = Date.now() + Math.random();
+                            return { id, name: char.name, age, gender, species, otherTraits, desc: fullDesc, avatar, designSheet: avatar, img: avatar };
+                        }
+                    }
+                    return null;
+                });
+
+                const generatedChars = await Promise.all(charPromises);
+                generatedChars.forEach(charData => {
+                    if (charData) {
+                        task.characters.push(charData);
+                        task.selectedCharacters.push(charData);
+                        updateUI(() => {
+                            state.characters.push(charData);
+                            state.selectedCharacters.push(charData);
+                            renderCharacterCard(charData, true);
+                        });
+                    }
+                });
+                updateUI(() => { lucide.createIcons(); });
+
+                updateUI(() => {
+                    const status = document.getElementById('agentStatus');
+                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="check" class="w-3 h-3 text-green-500"></i> 角色提取完成，即将开始绘制...</span>`;
+                    lucide.createIcons();
+                });
+
+                await continueToPagination(generatingTaskId);
             } catch (e) {
                 console.error(e);
                 task.isGenerating = false;
@@ -1269,127 +1602,195 @@
             };
 
             updateUI(() => {
+                const modal = document.getElementById('characterConfirmModal');
+                if (modal) modal.classList.add('hidden');
                 const btn = document.getElementById('oneClickGenerateBtn');
                 btn.disabled = true;
                 btn.classList.add('opacity-50');
-                const status = document.getElementById('agentStatus');
-                status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 后端正在生成分镜和图片...</span>`;
-                lucide.createIcons();
             });
 
             try {
-                const pagesCount = task.pages || "4";
-                const rawStyleOption = task.style || "auto";
-                const ratio = task.ratio || "3:4";
-                const style = rawStyleOption === 'custom'
-                    ? (document.getElementById('customStyleText').value || "Professional comic style")
-                    : rawStyleOption;
-                const config = getModelConfig();
-
-                const response = await apiRequest('/generate/comic', {
-                    method: "POST",
-                    body: JSON.stringify({
-                        userPrompt: task.expandedStory || task.originalStory,
-                        style,
-                        panelCount: Number(pagesCount),
-                        aspectRatio: ratio,
-                        language: "en",
-                        characters: task.characters || [],
-                        selectedCharacters: task.selectedCharacters || [],
-                        customStyleImageBase64: customStyleImageBase64 || undefined,
-                        customStyleImageMimeType: customStyleImageMimeType || undefined,
-                        textApiKey: config.mode === 'user' ? config.textApiKey : undefined,
-                        imageApiKey: config.mode === 'user' ? config.imageApiKey : undefined,
-                        textModelKey: config.mode === 'user' ? config.textModelKey : defaultTextModelKey,
-                        imageModelKey: config.mode === 'user' ? config.imageModelKey : (document.getElementById('imageModelSelect').value || defaultImageModelKey)
-                    })
+                updateUI(() => {
+                    const status = document.getElementById('agentStatus');
+                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 4/5：规划分镜剧本...</span>`;
+                    lucide.createIcons();
                 });
 
-                const backendTaskId = response.data.taskId;
-                while (true) {
-                    const taskResponse = await apiRequest(`/tasks/${backendTaskId}`);
-                    const backendTask = taskResponse.data;
+                const pagesCount = task.pages || "5";
+                const rawStyleOption = task.style || "auto";
+                const ratio = task.ratio || "3:4";
+                const expandedStory = task.expandedStory;
+                if (!expandedStory) throw new Error("Missing expanded story, please start over.");
 
+                let style = rawStyleOption;
+                if (rawStyleOption === 'auto') {
                     updateUI(() => {
-                        const progress = Math.max(0, Math.min(100, backendTask.progress || 0));
-                        document.getElementById('progressBar').style.width = `${progress}%`;
-                        document.getElementById('progressText').innerText = `生成中 ${progress}%`;
-                    });
-
-                    if (backendTask.status === 'failed') {
-                        throw new Error(formatBackendTaskError(backendTask));
-                    }
-
-                    if (backendTask.status !== 'completed') {
-                        await sleep(2000);
-                        continue;
-                    }
-
-                    const taskComicPages = (backendTask.panels || []).map((panel, index) => ({
-                        page_number: panel.panel_number || index + 1,
-                        page_story: panel.narration,
-                        dialogue: panel.title || "",
-                        layout_logic: panel.image_prompt || "",
-                        panel_count: 1,
-                        imgData: panel.imageUrl,
-                        rawData: panel.rawData || null
-                    }));
-
-                    const newExecution = {
-                        id: Date.now().toString(),
-                        label: `第 ${(task.executions || []).length + 1} 次执行`,
-                        createdAt: new Date().toLocaleString(),
-                        pages: JSON.parse(JSON.stringify(taskComicPages))
-                    };
-                    if (!task.executions) task.executions = [];
-                    task.executions.unshift(newExecution);
-                    task.hasGeneratedOnce = true;
-                    task.isGenerating = false;
-                    task.generatedComicPages = JSON.parse(JSON.stringify(taskComicPages));
-
-                    updateUI(() => {
-                        const grid = document.getElementById('comicGrid');
-                        grid.innerHTML = '';
-                        let styleRatio = "1/1";
-                        if (ratio === "16:9") styleRatio = "16/9";
-                        else if (ratio === "9:16") styleRatio = "9/16";
-                        else if (ratio === "3:4") styleRatio = "3/4";
-
-                        taskComicPages.forEach((page, i) => {
-                            const imgContainer = document.createElement('div');
-                            imgContainer.className = `relative border-[3px] border-black bg-white flex flex-col group overflow-hidden w-full shrink-0 grow-0`;
-                            imgContainer.style.aspectRatio = styleRatio;
-                            imgContainer.innerHTML = `
-                                <img src="${page.imgData}" class="w-full h-full object-cover block cursor-pointer" onclick="openComicViewer(${i})">
-                                <div class="absolute top-2 left-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded font-bold">PANEL ${page.page_number}</div>
-                                <button class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-bold text-sm" onclick="openComicViewer(${i})">点击进入阅读模式</button>
-                            `;
-                            grid.appendChild(imgContainer);
-                        });
-
-                        window.generatedComicPages = JSON.parse(JSON.stringify(taskComicPages));
-                        state.generatedComicPages = window.generatedComicPages;
-                        state.executions = task.executions;
-                        state.hasGeneratedOnce = true;
-                        state.currentExecutionId = newExecution.id;
-                        document.getElementById('progressBar').style.width = '100%';
-                        document.getElementById('progressText').innerText = "Complete ✨";
-                        document.getElementById('downloadFullComicBtn').classList.remove('hidden');
-                        document.getElementById('downloadZipBtn').classList.remove('hidden');
-                        document.getElementById('agentStatus').innerHTML = `<span class="text-green-500 font-bold">全部生成完毕！</span>`;
-                        const btn = document.getElementById('oneClickGenerateBtn');
-                        btn.innerHTML = `<span>修改故事/漫画</span><i data-lucide="edit-3" class="w-4 h-4"></i>`;
-                        btn.disabled = false;
-                        btn.classList.remove('opacity-50');
-                        renderExecutions();
+                        const status = document.getElementById('agentStatus');
+                        status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 智能匹配画风中...</span>`;
                         lucide.createIcons();
                     });
-
-                    renderTasks();
-                    saveStateToLocal();
-                    break;
+                    const autoStyle = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.STYLE_AUTO_MATCH, `Story:\n${expandedStory}`);
+                    style = autoStyle || "Japanese manga style";
+                } else if (rawStyleOption === 'custom') {
+                    style = document.getElementById('customStyleText').value || "Professional comic style";
                 }
-                
+                const isCustomStyleWithImage = rawStyleOption === 'custom' && customStyleImageBase64;
+
+                updateUI(() => {
+                    const status = document.getElementById('agentStatus');
+                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 4/5：规划分镜剧本...</span>`;
+                    lucide.createIcons();
+                });
+
+                const storyboardRes = await makeGeminiRequest(
+                    MODELS.TEXT,
+                    SYSTEM_PROMPTS.STORY_PAGINATION,
+                    `Pages: ${pagesCount}\nRatio: ${ratio}\nStyle: ${style}\n\nStory:\n${expandedStory}`,
+                    true
+                );
+                if (!storyboardRes) throw new Error("Pagination failed.");
+
+                let storyboardJson;
+                try {
+                    const cleanStr = storyboardRes.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                    storyboardJson = JSON.parse(cleanStr);
+                } catch (e) {
+                    throw new Error("Invalid storyboard format.");
+                }
+
+                updateUI(() => {
+                    document.getElementById('comicResultBox').classList.remove('hidden');
+                    document.getElementById('comicWrapper').classList.remove('hidden');
+                    const progressBox = document.getElementById('comicGenProgress');
+                    progressBox.classList.remove('hidden');
+                    const status = document.getElementById('agentStatus');
+                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 5/5：逐页渲染漫画中...</span>`;
+                    lucide.createIcons();
+                });
+
+                let charContextText = "CRITICAL CHARACTER REFERENCES:\n";
+                let inlineDataParts = [];
+                (task.selectedCharacters || []).slice(0, 5).forEach((char, index) => {
+                    charContextText += `- Character Name: "${char.name}". This is Reference Image ${index + 1}. You MUST strictly copy their exact facial features, hair, clothing, etc.\n`;
+                });
+                inlineDataParts = buildSelectedCharacterPromptParts(task.selectedCharacters || []).filter(part => part.inlineData);
+
+                let taskComicPages = [];
+                const total = storyboardJson.pages.length;
+                let previousPanelData = null;
+
+                let styleRatio = "1/1";
+                if (ratio === "16:9") styleRatio = "16/9";
+                else if (ratio === "9:16") styleRatio = "9/16";
+                else if (ratio === "4:5") styleRatio = "4/5";
+                else if (ratio === "3:4") styleRatio = "3/4";
+
+                for (let i = 0; i < total; i++) {
+                    const page = storyboardJson.pages[i];
+                    updateUI(() => {
+                        const progressText = document.getElementById('progressText');
+                        const progressBar = document.getElementById('progressBar');
+                        progressText.innerText = `Generating Page ${i + 1}/${total}...`;
+                        progressBar.style.width = `${(i / total) * 100}%`;
+                    });
+
+                    const scenePrompt = `[CHARACTER REFERENCES]
+${charContextText}
+[ART STYLE OVERRIDE]
+Render in style: ${style}.
+NO WATERMARKS, NO SIGNATURES, NO LOGOS.
+[PAGE INSTRUCTIONS]
+Page ${page.page_number}.
+Action & Environment: ${page.page_story}
+Dialogue (draw speech bubbles): "${page.dialogue || "None"}"
+Panel Count: ${page.panel_count}
+Layout Logic: ${page.layout_logic}`;
+
+                    let requestParts = [{ text: SYSTEM_PROMPTS.COMIC_RENDER + "\n\n" + scenePrompt }];
+                    if (isCustomStyleWithImage) {
+                        requestParts.push({ text: "Use the following image as a STRICT GLOBAL ART STYLE AND COLOR REFERENCE. Do NOT copy the action, ONLY art style and rendering technique:" });
+                        requestParts.push({ inlineData: { mimeType: customStyleImageMimeType, data: customStyleImageBase64 } });
+                    }
+                    if (previousPanelData) {
+                        requestParts.push({ text: "Use the following image as a STRICT STYLE AND ATMOSPHERE REFERENCE for continuity. Do NOT copy the action, ONLY art style:" });
+                        requestParts.push({ inlineData: { mimeType: previousPanelData.mimeType, data: previousPanelData.data } });
+                    }
+                    requestParts = requestParts.concat(inlineDataParts);
+
+                    try {
+                        const result = await makeModelImageRequest({
+                            prompt: scenePrompt,
+                            promptParts: requestParts,
+                            aspectRatio: ratio
+                        });
+                        const base64Image = result.images?.[0];
+                        const inlineData = result.raw?.candidates?.[0]?.content?.parts?.find(part => part.inlineData)?.inlineData || null;
+
+                        if (base64Image) {
+                            previousPanelData = inlineData;
+                            taskComicPages.push({
+                                ...page,
+                                imgData: base64Image,
+                                rawData: inlineData
+                            });
+
+                            updateUI(() => {
+                                const grid = document.getElementById('comicGrid');
+                                const imgContainer = document.createElement('div');
+                                imgContainer.className = `relative border-[3px] border-black bg-white flex flex-col group overflow-hidden w-full shrink-0 grow-0`;
+                                imgContainer.style.aspectRatio = styleRatio;
+                                imgContainer.innerHTML = `
+                                    <img src="${base64Image}" class="w-full h-full object-cover block cursor-pointer" onclick="openComicViewer(${i})">
+                                    <div class="absolute top-2 left-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded font-bold">PAGE ${page.page_number}</div>
+                                    <button class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-bold text-sm" onclick="openComicViewer(${i})">点击进入阅读模式</button>
+                                `;
+                                grid.appendChild(imgContainer);
+                                window.generatedComicPages = taskComicPages;
+                                state.generatedComicPages = window.generatedComicPages;
+                            });
+                        }
+                    } catch (e) {
+                        console.error("Page Gen Error:", e);
+                    }
+                }
+
+                const newExecution = {
+                    id: Date.now().toString(),
+                    label: `第 ${(task.executions || []).length + 1} 次执行`,
+                    createdAt: new Date().toLocaleString(),
+                    pages: JSON.parse(JSON.stringify(taskComicPages))
+                };
+                if (!task.executions) task.executions = [];
+                task.executions.unshift(newExecution);
+                task.hasGeneratedOnce = true;
+                task.isGenerating = false;
+                task.generatedComicPages = JSON.parse(JSON.stringify(taskComicPages));
+
+                updateUI(() => {
+                    const progressBar = document.getElementById('progressBar');
+                    const progressText = document.getElementById('progressText');
+                    const progressBox = document.getElementById('comicGenProgress');
+                    progressBar.style.width = `100%`;
+                    progressText.innerText = "Complete ✨";
+                    setTimeout(() => { progressBox.classList.add('hidden'); }, 2000);
+                    document.getElementById('downloadFullComicBtn').classList.remove('hidden');
+                    document.getElementById('downloadZipBtn').classList.remove('hidden');
+                    document.getElementById('agentStatus').innerHTML = `<span class="text-green-500 font-bold">全部生成完毕！</span>`;
+                    const btn = document.getElementById('oneClickGenerateBtn');
+                    btn.innerHTML = `<span>修改故事/漫画</span><i data-lucide="edit-3" class="w-4 h-4"></i>`;
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50');
+                    window.generatedComicPages = JSON.parse(JSON.stringify(taskComicPages));
+                    state.generatedComicPages = window.generatedComicPages;
+                    state.executions = task.executions;
+                    state.hasGeneratedOnce = true;
+                    state.currentExecutionId = newExecution.id;
+                    renderExecutions();
+                    lucide.createIcons();
+                });
+
+                renderTasks();
+                saveStateToLocal();
             } catch (e) {
                 console.error(e);
                 task.isGenerating = false;
@@ -1808,11 +2209,13 @@
             const desc = descParts.length > 0 ? descParts.join(', ') : 'A basic character';
             
             try {
-                const imageData = await generateImageWithBackend(
-                    `Professional character turnaround sheet, clean light gray studio background, front side back alignment, subtle rim lighting, no text. Character Name: ${name}. Description: ${desc}.`,
-                    "character design sheet",
-                    "1:1"
-                );
+                const imageData = await requestCharacterDesignImage({
+                    name,
+                    description: desc,
+                    uploadedBase64: window.uploadedImageBase64 || null,
+                    uploadedMimeType: window.uploadedImageMimeType || null,
+                    preferredGoogleModel: MODELS.IMAGE_FAST
+                });
                 preview.src = imageData;
                 window.lastGeneratedAvatar = imageData;
                 window.lastGeneratedDesignSheet = imageData;
@@ -1998,7 +2401,13 @@
             const rawStyleOption = document.getElementById('artStyleSelect').value;
             let style = rawStyleOption;
             if (rawStyleOption === 'auto') {
-                style = "Japanese manga style";
+                const expandedStory = state.expandedStory;
+                if (expandedStory) {
+                    const autoStyle = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.STYLE_AUTO_MATCH, `Story:\n${expandedStory}`);
+                    style = autoStyle || "Japanese manga style";
+                } else {
+                    style = "Japanese manga style";
+                }
             } else if (rawStyleOption === 'custom') {
                 style = document.getElementById('customStyleText').value || "Professional comic style";
             }
@@ -2006,6 +2415,7 @@
             const requestParts = [];
             requestParts.push({
                 text: [
+                    SYSTEM_PROMPTS.COMIC_RENDER,
                     "[ART STYLE OVERRIDE]",
                     `Render in style: ${style}.`,
                     "NO WATERMARKS, NO SIGNATURES, NO LOGOS.",

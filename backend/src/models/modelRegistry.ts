@@ -20,7 +20,7 @@ export interface AppModelConfig {
 }
 
 export const MODEL_REGISTRY: AppModelConfig[] = [
-  { key: "google.gemini-3.1-flash-lite", displayName: "Gemini 3.1 Flash-Lite", provider: "google", category: "text", realModelId: "gemini-3.1-flash-lite-preview", endpointType: "gemini-generate-content", defaultParams: { temperature: 0.7, responseMimeType: "application/json" } },
+  { key: "google.gemini-3.1-flash-lite", displayName: "Gemini 3.1 Flash-Lite", provider: "google", category: "text", realModelId: "gemini-3.1-flash-lite-preview", endpointType: "gemini-generate-content", defaultParams: { temperature: 0.7 } },
   { key: "google.gemini-3.5-flash", displayName: "Gemini 3.5 Flash", provider: "google", category: "text", realModelId: "gemini-3.5-flash", endpointType: "gemini-generate-content", defaultParams: { temperature: 0.7 } },
   { key: "google.gemini-3.1-pro", displayName: "Gemini 3.1 Pro", provider: "google", category: "text", realModelId: "gemini-3.1-pro", endpointType: "gemini-generate-content", defaultParams: { temperature: 0.6 } },
   { key: "openai.gpt-5.5", displayName: "GPT-5.5", provider: "openai", category: "text", realModelId: "gpt-5.5", endpointType: "openai-responses", defaultParams: { temperature: 0.7 } },

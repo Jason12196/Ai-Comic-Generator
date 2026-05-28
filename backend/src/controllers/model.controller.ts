@@ -21,6 +21,13 @@ const generateImageSchema = z.object({
   apiKey: z.string().min(1).optional(),
   prompt: z.string().min(1),
   images: z.array(z.string()).optional(),
+  promptParts: z.array(z.object({
+    text: z.string().optional(),
+    inlineData: z.object({
+      mimeType: z.string().min(1),
+      data: z.string().min(1)
+    }).optional()
+  })).optional(),
   params: z.record(z.string(), z.unknown()).optional()
 });
 
