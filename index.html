@@ -232,27 +232,6 @@
                                     </div>
                                 </div>
                                 
-                                <div class="flex flex-col gap-2">
-                                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">模型选择</span>
-                                    <div class="relative w-full" id="modelDropdownInnerContainer">
-                                        <button type="button" class="flex items-center justify-between w-full px-3 py-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-xs font-bold text-gray-700 transition-colors" onclick="toggleDropdown('modelDropdown')">
-                                            <span id="modelBtnText" class="truncate">Nano 2</span>
-                                            <i data-lucide="chevron-down" class="w-3.5 h-3.5 shrink-0"></i>
-                                        </button>
-                                        <div id="modelDropdown" class="hidden absolute top-0 left-full ml-1 w-full bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 py-2 z-[70] animate-in fade-in zoom-in-95 duration-200">
-                                            <button type="button" onclick="selectModel('google.gemini-3.1-flash-image-preview', 'Nano Banana 2')" class="w-full text-left px-4 py-2 text-xs text-purple-600 bg-purple-50 font-bold">Nano Banana 2</button>
-                                            <button type="button" onclick="selectModel('google.gemini-3-pro-image-preview', 'Nano Banana Pro')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">Nano Banana Pro</button>
-                                            <button type="button" onclick="selectModel('openai.gpt-image-2', 'GPT Image 2')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">GPT Image 2</button>
-                                            <button type="button" onclick="selectModel('atlas.openai-gpt-image-2', 'Atlas Cloud GPT Image 2')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">Atlas Cloud GPT Image 2</button>
-                                        </div>
-                                        <select id="imageModelSelect" class="hidden">
-                                            <option value="google.gemini-3.1-flash-image-preview" selected>Nano Banana 2</option>
-                                            <option value="google.gemini-3-pro-image-preview">Nano Banana Pro</option>
-                                            <option value="openai.gpt-image-2">GPT Image 2</option>
-                                            <option value="atlas.openai-gpt-image-2">Atlas Cloud GPT Image 2</option>
-                                        </select>
-                                    </div>
-                                </div>
                             </div>
                         </div>
                         </div>
@@ -286,16 +265,14 @@
                             <div id="pageDropdown" class="hidden absolute bottom-full left-0 mb-2 w-32 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 py-2 z-50 origin-bottom-left animate-in fade-in zoom-in-95 duration-200">
                                 <button type="button" onclick="selectPage('1')" class="w-full text-left px-4 py-2 text-xs text-purple-600 bg-purple-50 font-bold">1 页</button>
                                 <button type="button" onclick="selectPage('2')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">2 页</button>
-                                <button type="button" onclick="selectPage('4')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">4 格</button>
-                                <button type="button" onclick="selectPage('6')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">6 格</button>
-                                <button type="button" onclick="selectPage('8')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">8 格</button>
+                                <button type="button" onclick="selectPage('5')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">5 页</button>
+                                <button type="button" onclick="selectPage('10')" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-purple-50 hover:text-purple-600">10 页</button>
                             </div>
                             <select id="pageSelect" class="hidden">
                                 <option value="1" selected>1 页</option>
                                 <option value="2">2 页</option>
-                                <option value="4">4 格</option>
-                                <option value="6">6 格</option>
-                                <option value="8">8 格</option>
+                                <option value="5">5 页</option>
+                                <option value="10">10 页</option>
                             </select>
                         </div>
 
@@ -496,7 +473,7 @@
             currentTaskId: null,
             characters: [], 
             selectedCharacters: [], 
-            pages: 4,
+            pages: 5,
             ratio: "3:4",
             originalStory: "",
             expandedStory: "",
@@ -507,8 +484,6 @@
         };
         let editingCharId = null;
         let editingCharIndex = -1;
-        let isReviewingCharacters = false;
-        let pendingStoryboardJson = null;
 
         let customStyleImageBase64 = null;
         let customStyleImageMimeType = null;
@@ -538,15 +513,12 @@
 
             renderModelSelectOptions('textModelInput', availableTextModels, localStorage.getItem('aiComicTextModel') || defaultTextModelKey);
             renderModelSelectOptions('imageModelInput', availableImageModels, localStorage.getItem('aiComicImageModel') || defaultImageModelKey);
-            const serverImageSelect = document.getElementById('imageModelSelect');
-            if (serverImageSelect) {
-                serverImageSelect.value = localStorage.getItem('aiComicServerImageModel') || defaultImageModelKey;
-            }
             updateProviderHint();
         }
 
         function getModelByKeyFromCache(modelKey) {
-            return [...availableTextModels, ...availableImageModels].find(model => model.key === modelKey) || null;
+            const normalizedModelKey = GEMINI_MODEL_KEY_MAP[modelKey] || modelKey;
+            return [...availableTextModels, ...availableImageModels].find(model => model.key === normalizedModelKey) || null;
         }
 
         function getProviderKeyValue(provider) {
@@ -575,26 +547,6 @@
             }
 
             return null;
-        }
-
-        function sleep(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
-        }
-
-        function formatBackendTaskError(task) {
-            const baseMessage = task?.error || 'Backend task failed';
-            const details = task?.errorDetails;
-            if (!details || typeof details !== 'object') {
-                return baseMessage;
-            }
-
-            const parts = [baseMessage];
-            if (details.provider) parts.push(`provider=${details.provider}`);
-            if (details.phase) parts.push(`phase=${details.phase}`);
-            if (details.statusCode) parts.push(`status=${details.statusCode}`);
-            if (details.atlasStatus) parts.push(`atlasStatus=${details.atlasStatus}`);
-            if (details.predictionId) parts.push(`predictionId=${details.predictionId}`);
-            return parts.join(' | ');
         }
 
         function getModelConfig() {
@@ -636,10 +588,9 @@
 
             const mode = document.getElementById('apiModeSelect').value;
             if (mode !== 'user') {
-                const serverImageModel = document.getElementById('imageModelSelect').value || defaultImageModelKey;
-                const imageModel = getModelByKeyFromCache(serverImageModel);
+                const imageModel = getModelByKeyFromCache(defaultImageModelKey);
                 const textModel = getModelByKeyFromCache(defaultTextModelKey);
-                hint.textContent = `服务端托管中：文本默认 ${textModel?.displayName || defaultTextModelKey}，图片默认 ${imageModel?.displayName || serverImageModel}`;
+                hint.textContent = `服务端托管中：文本默认 ${textModel?.displayName || defaultTextModelKey}，图片默认 ${imageModel?.displayName || defaultImageModelKey}`;
                 return;
             }
 
@@ -716,7 +667,7 @@
                             executions: [],
                             characters: parsedState.characters || [],
                             selectedCharacters: parsedState.selectedCharacters || [],
-                            pages: parsedState.pages || "4",
+                            pages: parsedState.pages || "5",
                             ratio: parsedState.ratio || "3:4",
                             style: parsedState.style || "auto",
                             originalStory: parsedState.originalStory || "",
@@ -826,11 +777,6 @@
             localStorage.setItem('aiComicImageModel', document.getElementById('imageModelInput').value);
             updateProviderHint();
         });
-        document.getElementById('imageModelSelect').addEventListener('change', () => {
-            localStorage.setItem('aiComicServerImageModel', document.getElementById('imageModelSelect').value);
-            updateProviderHint();
-        });
-
         function clearHistory() {
             if (confirm("确定要清除所有历史记录（包括已保存的角色和漫画）吗？")) {
                 localStorage.removeItem('aiComicState');
@@ -1124,16 +1070,6 @@
             return data;
         }
 
-        function getApiKey() {
-            const config = getModelConfig();
-            const key = config.mode === 'user' ? (config.textApiKey || config.imageApiKey) : "server-managed";
-            if (!key) {
-                alert("Please enter your Gemini API Key at the top first.");
-                return null;
-            }
-            return key;
-        }
-
         async function testApiKey() {
             const statusCheck = document.getElementById('apiKeyStatusCheck');
             const statusError = document.getElementById('apiKeyStatusError');
@@ -1176,10 +1112,8 @@
             const config = getModelConfig();
             return {
                 config,
-                textModelKey: config.mode === 'user' ? config.textModelKey : defaultTextModelKey,
-                imageModelKey: config.mode === 'user'
-                    ? config.imageModelKey
-                    : (document.getElementById('imageModelSelect').value || defaultImageModelKey),
+                textModelKey: config.textModelKey || defaultTextModelKey,
+                imageModelKey: config.imageModelKey || defaultImageModelKey,
                 textApiKey: config.mode === 'user' ? config.textApiKey : undefined,
                 imageApiKey: config.mode === 'user' ? config.imageApiKey : undefined
             };
@@ -2455,9 +2389,7 @@ Layout Logic: ${page.layout_logic}`;
                 const response = await apiRequest('/models/generate-image', {
                     method: "POST",
                     body: JSON.stringify({
-                        modelKey: config.mode === 'user'
-                            ? config.imageModelKey
-                            : (document.getElementById('imageModelSelect').value || defaultImageModelKey),
+                        modelKey: config.imageModelKey || defaultImageModelKey,
                         apiKey: config.mode === 'user' ? config.imageApiKey : undefined,
                         prompt: imagePrompt,
                         promptParts: requestParts,
@@ -2535,11 +2467,8 @@ Layout Logic: ${page.layout_logic}`;
         function toggleDropdown(id) {
             const dropdown = document.getElementById(id);
             
-            // 如果点击的是子菜单（如 styleDropdown 或 modelDropdown）
-            if (id === 'styleDropdown' || id === 'modelDropdown') {
-                // 关闭其他同级子菜单
-                if (id === 'styleDropdown') document.getElementById('modelDropdown').classList.add('hidden');
-                if (id === 'modelDropdown') document.getElementById('styleDropdown').classList.add('hidden');
+            // 如果点击的是子菜单（如 styleDropdown）
+            if (id === 'styleDropdown') {
             } else {
                 // 这是一个主菜单（如 ratio, page, settings）
                 activeDropdowns.forEach(d => {
@@ -2565,9 +2494,7 @@ Layout Logic: ${page.layout_logic}`;
                 !e.target.closest('button[onclick^="toggleDropdown"]')) {
                 activeDropdowns.forEach(d => d.classList.add('hidden'));
                 activeDropdowns = [];
-                // 确保子菜单也关闭
                 document.getElementById('styleDropdown')?.classList.add('hidden');
-                document.getElementById('modelDropdown')?.classList.add('hidden');
             }
         });
 
@@ -2595,20 +2522,12 @@ Layout Logic: ${page.layout_logic}`;
             saveStateToLocal();
         }
 
-        function selectModel(value, label) {
-            document.getElementById('imageModelSelect').value = value;
-            document.getElementById('modelBtnText').innerText = label;
-            document.getElementById('modelDropdown').classList.add('hidden');
-            activeDropdowns = activeDropdowns.filter(d => d.id !== 'modelDropdown');
-        }
-
         let customStyleCount = 0;
         
         function syncDropdownUI() {
             const ratioSelect = document.getElementById('aspectRatioSelect');
             const pageSelect = document.getElementById('pageSelect');
             const styleSelect = document.getElementById('artStyleSelect');
-            const modelSelect = document.getElementById('imageModelSelect');
             
             if(ratioSelect && document.getElementById('ratioBtnText')) {
                 const ratioText = ratioSelect.options[ratioSelect.selectedIndex]?.text || ratioSelect.value;
@@ -2620,10 +2539,6 @@ Layout Logic: ${page.layout_logic}`;
             if(styleSelect && document.getElementById('styleBtnText')) {
                 const styleText = styleSelect.options[styleSelect.selectedIndex]?.text || "自定义画风";
                 document.getElementById('styleBtnText').innerText = styleText;
-            }
-            if(modelSelect && document.getElementById('modelBtnText')) {
-                const modelText = modelSelect.options[modelSelect.selectedIndex]?.text || modelSelect.value;
-                document.getElementById('modelBtnText').innerText = modelText;
             }
         }
 
@@ -2898,7 +2813,7 @@ Layout Logic: ${page.layout_logic}`;
                 executions: [],
                 characters: [],
                 selectedCharacters: [],
-                pages: "4",
+                pages: "5",
                 ratio: "3:4",
                 style: "auto",
                 originalStory: "",

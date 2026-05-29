@@ -82,8 +82,8 @@
     ) ? "http://127.0.0.1:3001/api" : "/api";
     let availableTextModels = [];
     let availableImageModels = [];
-    let defaultTextModelKey = "openai.gpt-5.5";
-    let defaultImageModelKey = "atlas.openai-gpt-image-2";
+    let defaultTextModelKey = "google.gemini-3.1-flash-lite";
+    let defaultImageModelKey = "google.gemini-3-pro-image-preview";
 
     async function apiRequest(path, options = {}) {
       const response = await fetch(`${API_BASE_URL}${path}`, {
