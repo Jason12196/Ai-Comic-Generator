@@ -1,8 +1,8 @@
 import { getModelByKey, listModelsByCategory } from "../models/modelRegistry.js";
-import { generateAtlasImage } from "../providers/atlas.provider.js";
+import { generateAtlasImageEdit, generateAtlasTextToImage } from "../providers/atlas.provider.js";
 import { generateDeepSeekText } from "../providers/deepseek.provider.js";
 import { generateGeminiImage, generateGeminiText } from "../providers/google.provider.js";
-import { generateOpenAIImage, generateOpenAIText } from "../providers/openai.provider.js";
+import { generateOpenAIImageEdit, generateOpenAIImageFromPrompt, generateOpenAIText } from "../providers/openai.provider.js";
 import type { ImageGenerationResult, ImagePromptPart, ModelMessage, TextGenerationResult } from "../providers/types.js";
 
 export class ModelRouterService {
@@ -62,15 +62,40 @@ export class ModelRouterService {
   }): Promise<ImageGenerationResult> {
     const model = this.validateModelKey(input.modelKey, "image");
     const params = { ...(model.defaultParams ?? {}), ...(input.params ?? {}) };
+    const hasReferenceImages = Array.isArray(input.images) && input.images.length > 0;
 
     if (model.provider === "openai") {
-      return generateOpenAIImage({ apiKey: input.apiKey, modelId: model.realModelId, prompt: input.prompt, params });
+      return hasReferenceImages
+        ? generateOpenAIImageEdit({
+          apiKey: input.apiKey,
+          modelId: model.realModelId,
+          prompt: input.prompt,
+          images: input.images,
+          params
+        })
+        : generateOpenAIImageFromPrompt({
+          apiKey: input.apiKey,
+          modelId: model.realModelId,
+          prompt: input.prompt,
+          params
+        });
     }
     if (model.provider === "google") {
       return generateGeminiImage({ apiKey: input.apiKey, modelId: model.realModelId, prompt: input.prompt, promptParts: input.promptParts, params });
     }
     if (model.provider === "atlas") {
-      return generateAtlasImage({ apiKey: input.apiKey, prompt: input.prompt, images: input.images, params });
+      return hasReferenceImages
+        ? generateAtlasImageEdit({
+          apiKey: input.apiKey,
+          prompt: input.prompt,
+          images: input.images ?? [],
+          params
+        })
+        : generateAtlasTextToImage({
+          apiKey: input.apiKey,
+          prompt: input.prompt,
+          params
+        });
     }
 
     throw new Error("Unsupported image provider");

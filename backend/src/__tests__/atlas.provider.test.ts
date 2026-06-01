@@ -67,6 +67,28 @@ describe("atlas provider", () => {
     }));
   });
 
+  it("normalizes base64 outputs into data urls when base64 output is enabled", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(createJsonResponse({ data: { id: "pred_base64" } }))
+      .mockResolvedValueOnce(createJsonResponse({
+        data: {
+          status: "completed",
+          outputs: ["ZmFrZS1pbWFnZS1ieXRlcw=="]
+        }
+      }));
+    global.fetch = fetchMock as typeof fetch;
+
+    const result = await generateAtlasImage({
+      prompt: "a happy fox",
+      params: {
+        output_format: "png",
+        enable_base64_output: true
+      }
+    });
+
+    expect(result.images[0]).toBe("data:image/png;base64,ZmFrZS1pbWFnZS1ieXRlcw==");
+  });
+
   it("surfaces submission failures with phase and status code", async () => {
     global.fetch = vi.fn().mockResolvedValue(createJsonResponse({
       message: "Invalid bearer token"

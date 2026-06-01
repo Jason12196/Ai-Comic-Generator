@@ -17,12 +17,16 @@ export async function generateDeepSeekText(input: {
     apiKey,
     baseURL: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"
   });
+  const { responseMimeType, ...restParams } = input.params ?? {};
 
   const completion = await client.chat.completions.create({
     model: input.modelId,
     messages: input.messages,
     stream: false,
-    ...(input.params ?? {})
+    ...(restParams ?? {}),
+    ...(responseMimeType === "application/json"
+      ? { response_format: { type: "json_object" } }
+      : {})
   });
 
   return {

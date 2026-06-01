@@ -1119,22 +1119,132 @@
             };
         }
 
-        async function makeModelTextRequest(systemPrompt, userTextOrContents, forceJSON = false, modelKeyOverride = null) {
-            const config = getModelConfig();
+        function getModelConfigByKey(modelKey, fallbackCategory = 'text') {
+            const config = getModelByKeyFromCache(modelKey);
+            if (config) {
+                return config;
+            }
+
+            if (fallbackCategory === 'image') {
+                return getModelByKeyFromCache(defaultImageModelKey);
+            }
+
+            return getModelByKeyFromCache(defaultTextModelKey);
+        }
+
+        function resolveWorkflowTextModelKey(modelKeyOverride = null) {
+            const selection = getRuntimeModelSelection();
+            return modelKeyOverride || selection.textModelKey;
+        }
+
+        function resolveWorkflowImageModelKey(modelKeyOverride = null) {
+            const selection = getRuntimeModelSelection();
+            return GEMINI_MODEL_KEY_MAP[modelKeyOverride] || modelKeyOverride || selection.imageModelKey;
+        }
+
+        function normalizeTextMessages(userTextOrContents) {
+            return typeof userTextOrContents === 'string'
+                ? [{ role: 'user', content: userTextOrContents }]
+                : userTextOrContents;
+        }
+
+        function buildImageDataUrl(inlineData) {
+            return `data:${inlineData.mimeType};base64,${inlineData.data}`;
+        }
+
+        function parseDataUrlToInlineData(dataUrl) {
+            if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+                return null;
+            }
+
+            const [metadata, data] = dataUrl.split(',', 2);
+            if (!metadata || !data) {
+                return null;
+            }
+
+            const mimeType = metadata.split(':')[1]?.split(';')[0];
+            if (!mimeType) {
+                return null;
+            }
+
+            return { mimeType, data };
+        }
+
+        function extractPromptTexts(promptParts = []) {
+            return promptParts
+                .map((part) => part && typeof part.text === 'string' ? part.text.trim() : '')
+                .filter(Boolean);
+        }
+
+        function extractPromptImages(promptParts = []) {
+            return promptParts
+                .filter((part) => part && ((part.inlineData && part.inlineData.mimeType && part.inlineData.data) || part.imageUrl))
+                .map((part) => part.imageUrl || buildImageDataUrl(part.inlineData));
+        }
+
+        function extractGeneratedInlineData(imageData, rawResponse) {
+            const apiInlineData = rawResponse?.candidates?.[0]?.content?.parts?.find(part => part.inlineData)?.inlineData || null;
+            if (apiInlineData) {
+                return apiInlineData;
+            }
+
+            return parseDataUrlToInlineData(imageData);
+        }
+
+        function buildImageRequestPayload({ prompt, promptParts, aspectRatio, modelKeyOverride, apiKeyOverride }) {
+            const selection = getRuntimeModelSelection();
+            const modelKey = resolveWorkflowImageModelKey(modelKeyOverride);
+            const modelConfig = getModelConfigByKey(modelKey, 'image');
+            const provider = modelConfig?.provider || 'google';
+            const effectivePromptParts = Array.isArray(promptParts) ? promptParts : [];
+            const promptTexts = extractPromptTexts(effectivePromptParts);
+            const referenceImages = extractPromptImages(effectivePromptParts);
+
+            let finalPrompt = prompt;
+            let images;
+            let params;
+            let finalPromptParts;
+
+            if (provider === 'google') {
+                finalPromptParts = effectivePromptParts;
+                params = { aspectRatio };
+            } else {
+                finalPrompt = promptTexts.length > 0 ? promptTexts.join('\n\n') : prompt;
+                images = referenceImages.length > 0 ? referenceImages : undefined;
+
+                const ratioToSize = {
+                    '1:1': '1024x1024',
+                    '3:4': '1024x1536',
+                    '4:5': '1024x1536',
+                    '9:16': '1024x1536',
+                    '16:9': '1536x1024'
+                };
+                params = { size: ratioToSize[aspectRatio] || '1024x1024' };
+            }
+
+            return {
+                modelKey,
+                apiKey: apiKeyOverride || selection.imageApiKey,
+                prompt: finalPrompt,
+                promptParts: finalPromptParts,
+                images,
+                params
+            };
+        }
+
+        async function callWorkflowTextModel(systemPrompt, userTextOrContents, forceJSON = false, modelKeyOverride = null) {
             const keyError = validateModelKeysForCurrentSelection();
             if (keyError) {
                 throw new Error(keyError);
             }
 
             const selection = getRuntimeModelSelection();
-            const contents = typeof userTextOrContents === 'string'
-                ? [{ role: 'user', content: userTextOrContents }]
-                : userTextOrContents;
+            const contents = normalizeTextMessages(userTextOrContents);
 
             const response = await apiRequest('/models/generate-text', {
                 method: "POST",
                 body: JSON.stringify({
-                    modelKey: modelKeyOverride || selection.textModelKey,
+                    modelKey: resolveWorkflowTextModelKey(modelKeyOverride),
                     apiKey: selection.textApiKey,
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -1151,45 +1261,43 @@
             return text;
         }
 
-        async function makeGeminiRequest(model, systemPrompt, userTextOrContents, forceJSON = false) {
-            const selection = getRuntimeModelSelection();
-            const modelKey = GEMINI_MODEL_KEY_MAP[model] || (typeof model === 'string' && model.includes('.') ? model : selection.textModelKey);
-            return makeModelTextRequest(systemPrompt, userTextOrContents, forceJSON, modelKey);
-        }
-
-        async function makeModelImageRequest({ prompt, promptParts, aspectRatio, modelKeyOverride, apiKeyOverride }) {
+        async function callWorkflowImageModel({ prompt, promptParts, aspectRatio, modelKeyOverride, apiKeyOverride }) {
             const keyError = validateModelKeysForCurrentSelection();
             if (keyError) {
                 throw new Error(keyError);
             }
 
-            const selection = getRuntimeModelSelection();
+            const payload = buildImageRequestPayload({ prompt, promptParts, aspectRatio, modelKeyOverride, apiKeyOverride });
             const response = await apiRequest('/models/generate-image', {
                 method: "POST",
-                body: JSON.stringify({
-                    modelKey: GEMINI_MODEL_KEY_MAP[modelKeyOverride] || modelKeyOverride || selection.imageModelKey,
-                    apiKey: apiKeyOverride || selection.imageApiKey,
-                    prompt,
-                    promptParts,
-                    params: { aspectRatio }
-                })
+                body: JSON.stringify(payload)
             });
 
             return response.data;
         }
 
+        const makeModelTextRequest = callWorkflowTextModel;
+        const makeModelImageRequest = callWorkflowImageModel;
+
         function buildSelectedCharacterPromptParts(selectedCharacters) {
             const parts = [];
             selectedCharacters.slice(0, 5).forEach((char, index) => {
-                if (!char || !char.avatar || !char.avatar.startsWith('data:')) return;
-                const [metadata, data] = char.avatar.split(',', 2);
-                const mimeType = metadata.split(':')[1].split(';')[0];
+                if (!char || !char.avatar) return;
                 parts.push({
                     text: `Character Name: "${char.name || `Character ${index + 1}`}". This is Reference Image ${index + 1}. You MUST strictly copy their exact facial features, hair, clothing, etc.`
                 });
-                parts.push({
-                    inlineData: { mimeType, data }
-                });
+
+                if (char.avatar.startsWith('data:')) {
+                    const [metadata, data] = char.avatar.split(',', 2);
+                    const mimeType = metadata.split(':')[1].split(';')[0];
+                    parts.push({
+                        inlineData: { mimeType, data }
+                    });
+                } else {
+                    parts.push({
+                        imageUrl: char.avatar
+                    });
+                }
             });
             return parts;
         }
@@ -1262,13 +1370,13 @@ Professional character turnaround sheet, clean light gray studio background, fro
             preferredGoogleModel = null
         }) {
             const selection = getRuntimeModelSelection();
-            const defaultImageModel = getModelByKeyFromCache(selection.imageModelKey);
+            const selectedImageModel = getModelByKeyFromCache(selection.imageModelKey);
             const finalDesc = description === 'A basic character' ? 'A detailed character concept design' : description;
 
             const tryGenerate = async (useProModel = false) => {
-                const currentModel = useProModel
+                const currentModel = useProModel && selectedImageModel?.provider === 'google'
                     ? MODELS.IMAGE
-                    : (preferredGoogleModel || (defaultImageModel?.provider === 'google' ? selection.imageModelKey : MODELS.IMAGE_FAST));
+                    : (preferredGoogleModel || selection.imageModelKey);
 
                 const designPromptSystem = buildCharacterDesignPromptSystem();
                 const designPromptParts = [{ text: `${designPromptSystem}\n\nCharacter Name: ${name}\nDescription: ${finalDesc}` }];
@@ -1314,12 +1422,12 @@ Professional character turnaround sheet, clean light gray studio background, fro
 
         async function apiCharacterDesign(charObj) {
             const selection = getRuntimeModelSelection();
-            const defaultImageModel = getModelByKeyFromCache(selection.imageModelKey);
+            const selectedImageModel = getModelByKeyFromCache(selection.imageModelKey);
 
             const tryGenerate = async (useProModel = false) => {
-                const overrideModelKey = useProModel
+                const overrideModelKey = useProModel && selectedImageModel?.provider === 'google'
                     ? MODELS.IMAGE
-                    : (defaultImageModel?.provider === 'google' ? selection.imageModelKey : MODELS.IMAGE_FAST);
+                    : selection.imageModelKey;
                 const prompt = `Generate a production-ready character turnaround sheet on a clean light gray studio background. IMPORTANT: You MUST output an image. DO NOT output text. NO WATERMARKS.
 Character Name: ${charObj.name}
 Role: ${charObj.role}
@@ -1405,7 +1513,7 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                         expansionPrompt += `\n\nCRITICAL: You MUST include and feature the following pre-defined characters in the expanded story:\n${charDetails}`;
                     }
 
-                    expandedStory = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.STORY_EXPANSION, expansionPrompt, false);
+                    expandedStory = await callWorkflowTextModel(SYSTEM_PROMPTS.STORY_EXPANSION, expansionPrompt, false);
                     if (!expandedStory) throw new Error("Story expansion failed: received empty response from API");
                 } else if (state.selectedCharacters && state.selectedCharacters.length > 0) {
                     const missingChars = state.selectedCharacters.filter(c => !prompt.toLowerCase().includes(c.name.toLowerCase()));
@@ -1438,7 +1546,7 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                     status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 2/5：提取出场角色中...</span>`;
                     lucide.createIcons();
                 });
-                const extractedJson = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.CHARACTER_EXTRACTION, `Story:\n${expandedStory}`, true);
+                const extractedJson = await callWorkflowTextModel(SYSTEM_PROMPTS.CHARACTER_EXTRACTION, `Story:\n${expandedStory}`, true);
                 let extractedChars = [];
                 try {
                     const cleanJson = (extractedJson || "[]").replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
@@ -1453,6 +1561,9 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                     lucide.createIcons();
                 });
 
+                const createdCharacterIds = new Set(
+                    (task.selectedCharacters || []).map((character) => character.id)
+                );
                 const charPromises = extractedChars.map(async (char) => {
                     const exists = task.selectedCharacters.find(c => c.name.toLowerCase().includes(char.name.toLowerCase()) || char.name.toLowerCase().includes(c.name.toLowerCase()));
                     if (!exists) {
@@ -1477,24 +1588,26 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                             ].filter(Boolean).join(', ');
 
                             const id = Date.now() + Math.random();
-                            return { id, name: char.name, age, gender, species, otherTraits, desc: fullDesc, avatar, designSheet: avatar, img: avatar };
+                            const charData = { id, name: char.name, age, gender, species, otherTraits, desc: fullDesc, avatar, designSheet: avatar, img: avatar };
+                            task.characters.push(charData);
+                            task.selectedCharacters.push(charData);
+                            updateUI(() => {
+                                if (createdCharacterIds.has(charData.id)) {
+                                    return;
+                                }
+                                createdCharacterIds.add(charData.id);
+                                state.characters.push(charData);
+                                state.selectedCharacters.push(charData);
+                                renderCharacterCard(charData, true);
+                                lucide.createIcons();
+                            });
+                            return charData;
                         }
                     }
                     return null;
                 });
 
-                const generatedChars = await Promise.all(charPromises);
-                generatedChars.forEach(charData => {
-                    if (charData) {
-                        task.characters.push(charData);
-                        task.selectedCharacters.push(charData);
-                        updateUI(() => {
-                            state.characters.push(charData);
-                            state.selectedCharacters.push(charData);
-                            renderCharacterCard(charData, true);
-                        });
-                    }
-                });
+                await Promise.allSettled(charPromises);
                 updateUI(() => { lucide.createIcons(); });
 
                 updateUI(() => {
@@ -1563,7 +1676,7 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                         status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 智能匹配画风中...</span>`;
                         lucide.createIcons();
                     });
-                    const autoStyle = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.STYLE_AUTO_MATCH, `Story:\n${expandedStory}`);
+                    const autoStyle = await callWorkflowTextModel(SYSTEM_PROMPTS.STYLE_AUTO_MATCH, `Story:\n${expandedStory}`);
                     style = autoStyle || "Japanese manga style";
                 } else if (rawStyleOption === 'custom') {
                     style = document.getElementById('customStyleText').value || "Professional comic style";
@@ -1576,8 +1689,7 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                     lucide.createIcons();
                 });
 
-                const storyboardRes = await makeGeminiRequest(
-                    MODELS.TEXT,
+                const storyboardRes = await callWorkflowTextModel(
                     SYSTEM_PROMPTS.STORY_PAGINATION,
                     `Pages: ${pagesCount}\nRatio: ${ratio}\nStyle: ${style}\n\nStory:\n${expandedStory}`,
                     true
@@ -1607,7 +1719,7 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                 (task.selectedCharacters || []).slice(0, 5).forEach((char, index) => {
                     charContextText += `- Character Name: "${char.name}". This is Reference Image ${index + 1}. You MUST strictly copy their exact facial features, hair, clothing, etc.\n`;
                 });
-                inlineDataParts = buildSelectedCharacterPromptParts(task.selectedCharacters || []).filter(part => part.inlineData);
+                inlineDataParts = buildSelectedCharacterPromptParts(task.selectedCharacters || []);
 
                 let taskComicPages = [];
                 const total = storyboardJson.pages.length;
@@ -1647,7 +1759,11 @@ Layout Logic: ${page.layout_logic}`;
                     }
                     if (previousPanelData) {
                         requestParts.push({ text: "Use the following image as a STRICT STYLE AND ATMOSPHERE REFERENCE for continuity. Do NOT copy the action, ONLY art style:" });
-                        requestParts.push({ inlineData: { mimeType: previousPanelData.mimeType, data: previousPanelData.data } });
+                        if (previousPanelData.mimeType && previousPanelData.data) {
+                            requestParts.push({ inlineData: { mimeType: previousPanelData.mimeType, data: previousPanelData.data } });
+                        } else if (previousPanelData.imageUrl) {
+                            requestParts.push({ imageUrl: previousPanelData.imageUrl });
+                        }
                     }
                     requestParts = requestParts.concat(inlineDataParts);
 
@@ -1658,14 +1774,14 @@ Layout Logic: ${page.layout_logic}`;
                             aspectRatio: ratio
                         });
                         const base64Image = result.images?.[0];
-                        const inlineData = result.raw?.candidates?.[0]?.content?.parts?.find(part => part.inlineData)?.inlineData || null;
+                        const inlineData = extractGeneratedInlineData(base64Image, result.raw);
 
                         if (base64Image) {
-                            previousPanelData = inlineData;
+                            previousPanelData = inlineData || (base64Image.startsWith('http') ? { imageUrl: base64Image } : null);
                             taskComicPages.push({
                                 ...page,
                                 imgData: base64Image,
-                                rawData: inlineData
+                                rawData: inlineData || (base64Image.startsWith('http') ? { imageUrl: base64Image } : null)
                             });
 
                             updateUI(() => {
@@ -2337,7 +2453,7 @@ Layout Logic: ${page.layout_logic}`;
             if (rawStyleOption === 'auto') {
                 const expandedStory = state.expandedStory;
                 if (expandedStory) {
-                    const autoStyle = await makeGeminiRequest(MODELS.TEXT, SYSTEM_PROMPTS.STYLE_AUTO_MATCH, `Story:\n${expandedStory}`);
+                    const autoStyle = await callWorkflowTextModel(SYSTEM_PROMPTS.STYLE_AUTO_MATCH, `Story:\n${expandedStory}`);
                     style = autoStyle || "Japanese manga style";
                 } else {
                     style = "Japanese manga style";
@@ -2370,6 +2486,9 @@ Layout Logic: ${page.layout_logic}`;
                 if (prevPage && prevPage.rawData && prevPage.rawData.mimeType && prevPage.rawData.data) {
                     requestParts.push({ text: "Use the following image as a STRICT STYLE AND ATMOSPHERE REFERENCE for continuity. Do NOT copy the action, ONLY art style:" });
                     requestParts.push({ inlineData: prevPage.rawData });
+                } else if (prevPage && prevPage.rawData && prevPage.rawData.imageUrl) {
+                    requestParts.push({ text: "Use the following image as a STRICT STYLE AND ATMOSPHERE REFERENCE for continuity. Do NOT copy the action, ONLY art style:" });
+                    requestParts.push({ imageUrl: prevPage.rawData.imageUrl });
                 }
             }
             requestParts.push(...buildSelectedCharacterPromptParts(state.selectedCharacters || []));
@@ -2385,19 +2504,13 @@ Layout Logic: ${page.layout_logic}`;
 
             try {
                 const imagePrompt = `Comic panel redraw in ${style}. Page ${page.page_number}. Action and environment: ${page.page_story}. Dialogue: ${page.dialogue || 'None'}. Layout logic: ${page.layout_logic}.`;
-                const config = getModelConfig();
-                const response = await apiRequest('/models/generate-image', {
-                    method: "POST",
-                    body: JSON.stringify({
-                        modelKey: config.imageModelKey || defaultImageModelKey,
-                        apiKey: config.mode === 'user' ? config.imageApiKey : undefined,
-                        prompt: imagePrompt,
-                        promptParts: requestParts,
-                        params: { aspectRatio: ratio }
-                    })
+                const response = await makeModelImageRequest({
+                    prompt: imagePrompt,
+                    promptParts: requestParts,
+                    aspectRatio: ratio
                 });
-                const base64Image = response.data.images[0];
-                const rawData = response.data.raw?.candidates?.[0]?.content?.parts?.find(part => part.inlineData)?.inlineData || null;
+                const base64Image = response.images[0];
+                const rawData = extractGeneratedInlineData(base64Image, response.raw) || (base64Image.startsWith('http') ? { imageUrl: base64Image } : null);
                 page.imgData = base64Image;
                 if (rawData) {
                     page.rawData = rawData;

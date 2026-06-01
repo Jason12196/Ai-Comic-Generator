@@ -74,6 +74,18 @@ function normalizeAtlasMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
+function normalizeAtlasOutputImage(output: string, params?: Record<string, unknown>) {
+  if (!output || output.startsWith("http://") || output.startsWith("https://") || output.startsWith("data:")) {
+    return output;
+  }
+
+  const outputFormat = typeof params?.output_format === "string" && params.output_format.trim()
+    ? params.output_format
+    : "jpeg";
+
+  return `data:image/${outputFormat};base64,${output}`;
+}
+
 async function parseAtlasJson(response: Response) {
   const rawText = await response.text();
   if (!rawText) {
@@ -102,7 +114,72 @@ export async function generateAtlasImage(input: {
   }
 
   const isEdit = Array.isArray(input.images) && input.images.length > 0;
-  const model = isEdit ? "openai/gpt-image-2/edit" : "openai/gpt-image-2/text-to-image";
+
+  return isEdit
+    ? generateAtlasImageEdit({
+      apiKey,
+      prompt: input.prompt,
+      images: input.images ?? [],
+      params: input.params
+    })
+    : generateAtlasTextToImage({
+      apiKey,
+      prompt: input.prompt,
+      params: input.params
+    });
+}
+
+export async function generateAtlasTextToImage(input: {
+  apiKey?: string;
+  prompt: string;
+  params?: Record<string, unknown>;
+}): Promise<ImageGenerationResult> {
+  const apiKey = input.apiKey || process.env.ATLAS_API_KEY;
+  if (!apiKey) {
+    throw new AtlasProviderError({
+      message: "Atlas API key is not configured",
+      phase: "config"
+    });
+  }
+
+  return submitAtlasImageGeneration({
+    apiKey,
+    model: "openai/gpt-image-2/text-to-image",
+    prompt: input.prompt,
+    params: input.params
+  });
+}
+
+export async function generateAtlasImageEdit(input: {
+  apiKey?: string;
+  prompt: string;
+  images: string[];
+  params?: Record<string, unknown>;
+}): Promise<ImageGenerationResult> {
+  const apiKey = input.apiKey || process.env.ATLAS_API_KEY;
+  if (!apiKey) {
+    throw new AtlasProviderError({
+      message: "Atlas API key is not configured",
+      phase: "config"
+    });
+  }
+
+  return submitAtlasImageGeneration({
+    apiKey,
+    model: "openai/gpt-image-2/edit",
+    prompt: input.prompt,
+    images: input.images,
+    params: input.params
+  });
+}
+
+async function submitAtlasImageGeneration(input: {
+  apiKey: string;
+  model: string;
+  prompt: string;
+  images?: string[];
+  params?: Record<string, unknown>;
+}) {
   const baseUrl = process.env.ATLAS_BASE_URL || "https://api.atlascloud.ai";
 
   let submitRes: Response;
@@ -111,13 +188,13 @@ export async function generateAtlasImage(input: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`
+        Authorization: `Bearer ${input.apiKey}`
       },
       body: JSON.stringify({
-        model,
+        model: input.model,
         prompt: input.prompt,
         ...(input.params ?? {}),
-        ...(isEdit ? { images: input.images } : {})
+        ...(input.images?.length ? { images: input.images } : {})
       })
     });
   } catch (error) {
@@ -145,7 +222,7 @@ export async function generateAtlasImage(input: {
     let pollRes: Response;
     try {
       pollRes = await fetch(`${baseUrl}/api/v1/model/prediction/${predictionId}`, {
-        headers: { Authorization: `Bearer ${apiKey}` }
+        headers: { Authorization: `Bearer ${input.apiKey}` }
       });
     } catch (error) {
       throw new AtlasProviderError({
@@ -181,7 +258,7 @@ export async function generateAtlasImage(input: {
       }
 
       return {
-        images: data.outputs,
+        images: data.outputs.map((output) => normalizeAtlasOutputImage(output, input.params)),
         raw: pollJson
       };
     }

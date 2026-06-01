@@ -33,7 +33,7 @@ export const MODEL_REGISTRY: AppModelConfig[] = [
   { key: "openai.gpt-image-2", displayName: "GPT Image 2", provider: "openai", category: "image", realModelId: "gpt-image-2", endpointType: "openai-images", supportsImages: true, supportsImageEdit: true, defaultParams: { size: "1024x1024", quality: "medium" } },
   { key: "google.gemini-3-pro-image-preview", displayName: "Nano Banana Pro", provider: "google", category: "image", realModelId: "gemini-3-pro-image-preview", endpointType: "gemini-generate-content", supportsImages: true, supportsImageEdit: true, defaultParams: { aspectRatio: "1:1", imageSize: "2K" } },
   { key: "google.gemini-3.1-flash-image-preview", displayName: "Nano Banana 2", provider: "google", category: "image", realModelId: "gemini-3.1-flash-image-preview", endpointType: "gemini-generate-content", supportsImages: true, supportsImageEdit: true, defaultParams: { aspectRatio: "1:1", imageSize: "2K" } },
-  { key: "atlas.openai-gpt-image-2", displayName: "Atlas Cloud GPT Image 2", provider: "atlas", category: "image", realModelId: "openai/gpt-image-2/text-to-image", endpointType: "atlas-generate-image", supportsImages: true, supportsImageEdit: true, defaultParams: { size: "1024x1024", quality: "medium", output_format: "jpeg", enable_sync_mode: false, enable_base64_output: false } }
+  { key: "atlas.openai-gpt-image-2", displayName: "Atlas Cloud GPT Image 2", provider: "atlas", category: "image", realModelId: "openai/gpt-image-2/text-to-image", endpointType: "atlas-generate-image", supportsImages: true, supportsImageEdit: true, defaultParams: { size: "1024x1024", quality: "medium", output_format: "jpeg", enable_sync_mode: false, enable_base64_output: true } }
 ];
 
 export function getModelByKey(key: string) {
