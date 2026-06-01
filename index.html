@@ -1191,6 +1191,63 @@
             return parseDataUrlToInlineData(imageData);
         }
 
+        function isTimeoutError(error) {
+            return error instanceof Error && /timed out|timeout/i.test(error.message);
+        }
+
+        function withTimeout(promise, timeoutMs, timeoutMessage) {
+            return new Promise((resolve, reject) => {
+                const timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+                promise
+                    .then((value) => {
+                        clearTimeout(timer);
+                        resolve(value);
+                    })
+                    .catch((error) => {
+                        clearTimeout(timer);
+                        reject(error);
+                    });
+            });
+        }
+
+        async function generateComicRenderPageWithRetry({ prompt, promptParts, aspectRatio, pageNumber, maxAttempts = 2, timeoutMs = 240000 }) {
+            let lastError = null;
+
+            for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+                try {
+                    const result = await withTimeout(
+                        makeModelImageRequest({
+                            prompt,
+                            promptParts,
+                            aspectRatio
+                        }),
+                        timeoutMs,
+                        `Comic render page ${pageNumber} timed out after ${Math.round(timeoutMs / 1000)} seconds`
+                    );
+
+                    const image = result.images?.[0];
+                    if (!image) {
+                        throw new Error(`Comic render page ${pageNumber} returned no image`);
+                    }
+
+                    return result;
+                } catch (error) {
+                    lastError = error instanceof Error ? error : new Error('Unknown comic render error');
+                    console.error(`Comic render page ${pageNumber} attempt ${attempt}/${maxAttempts} failed:`, lastError);
+
+                    if (attempt === maxAttempts) {
+                        break;
+                    }
+
+                    if (!isTimeoutError(lastError)) {
+                        break;
+                    }
+                }
+            }
+
+            throw lastError || new Error(`Comic render page ${pageNumber} failed`);
+        }
+
         function buildImageRequestPayload({ prompt, promptParts, aspectRatio, modelKeyOverride, apiKeyOverride }) {
             const selection = getRuntimeModelSelection();
             const modelKey = resolveWorkflowImageModelKey(modelKeyOverride);
@@ -1781,41 +1838,40 @@ Layout Logic: ${page.layout_logic}`;
                     }
                     requestParts = requestParts.concat(inlineDataParts);
 
-                    try {
-                        const result = await makeModelImageRequest({
-                            prompt: scenePrompt,
-                            promptParts: requestParts,
-                            aspectRatio: ratio
-                        });
-                        const base64Image = result.images?.[0];
-                        const inlineData = extractGeneratedInlineData(base64Image, result.raw);
+                    const result = await generateComicRenderPageWithRetry({
+                        prompt: scenePrompt,
+                        promptParts: requestParts,
+                        aspectRatio: ratio,
+                        pageNumber: page.page_number
+                    });
+                    const base64Image = result.images?.[0];
+                    const inlineData = extractGeneratedInlineData(base64Image, result.raw);
 
-                        if (base64Image) {
-                            previousPanelData = inlineData || (base64Image.startsWith('http') ? { imageUrl: base64Image } : null);
-                            taskComicPages.push({
-                                ...page,
-                                imgData: base64Image,
-                                rawData: inlineData || (base64Image.startsWith('http') ? { imageUrl: base64Image } : null)
-                            });
+                    previousPanelData = inlineData || (base64Image.startsWith('http') ? { imageUrl: base64Image } : null);
+                    taskComicPages.push({
+                        ...page,
+                        imgData: base64Image,
+                        rawData: inlineData || (base64Image.startsWith('http') ? { imageUrl: base64Image } : null)
+                    });
 
-                            updateUI(() => {
-                                const grid = document.getElementById('comicGrid');
-                                const imgContainer = document.createElement('div');
-                                imgContainer.className = `relative border-[3px] border-black bg-white flex flex-col group overflow-hidden w-full shrink-0 grow-0`;
-                                imgContainer.style.aspectRatio = styleRatio;
-                                imgContainer.innerHTML = `
-                                    <img src="${base64Image}" class="w-full h-full object-cover block cursor-pointer" onclick="openComicViewer(${i})">
-                                    <div class="absolute top-2 left-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded font-bold">PAGE ${page.page_number}</div>
-                                    <button class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-bold text-sm" onclick="openComicViewer(${i})">点击进入阅读模式</button>
-                                `;
-                                grid.appendChild(imgContainer);
-                                window.generatedComicPages = taskComicPages;
-                                state.generatedComicPages = window.generatedComicPages;
-                            });
-                        }
-                    } catch (e) {
-                        console.error("Page Gen Error:", e);
-                    }
+                    updateUI(() => {
+                        const grid = document.getElementById('comicGrid');
+                        const imgContainer = document.createElement('div');
+                        imgContainer.className = `relative border-[3px] border-black bg-white flex flex-col group overflow-hidden w-full shrink-0 grow-0`;
+                        imgContainer.style.aspectRatio = styleRatio;
+                        imgContainer.innerHTML = `
+                            <img src="${base64Image}" class="w-full h-full object-cover block cursor-pointer" onclick="openComicViewer(${i})">
+                            <div class="absolute top-2 left-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded font-bold">PAGE ${page.page_number}</div>
+                            <button class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-bold text-sm" onclick="openComicViewer(${i})">点击进入阅读模式</button>
+                        `;
+                        grid.appendChild(imgContainer);
+                        window.generatedComicPages = taskComicPages;
+                        state.generatedComicPages = window.generatedComicPages;
+                    });
+                }
+
+                if (taskComicPages.length !== total) {
+                    throw new Error(`Comic render completed with missing pages: expected ${total}, received ${taskComicPages.length}`);
                 }
 
                 const newExecution = {
