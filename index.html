@@ -8,87 +8,248 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #FFFFFF; color: #111827; overflow: hidden; }
-        .weshop-shadow { box-shadow: 0 20px 50px rgba(0, 0, 0, 0.06); }
-        .char-dash-box { border: 2px dashed #7C3AED; background-color: #FDFEFE; transition: all 0.3s ease; }
+        @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+        :root {
+            --bg: #f3f5fb;
+            --bg-strong: #eef2f9;
+            --surface: rgba(255, 255, 255, 0.62);
+            --surface-strong: rgba(255, 255, 255, 0.82);
+            --surface-border: rgba(255, 255, 255, 0.9);
+            --surface-shadow: 0 24px 80px rgba(140, 155, 196, 0.18), 0 6px 18px rgba(103, 114, 148, 0.08);
+            --text: #182033;
+            --muted: #7b859e;
+            --muted-soft: #a7aec0;
+            --accent: #7c71ff;
+            --accent-soft: rgba(124, 113, 255, 0.14);
+            --success: #92d7af;
+            --line: rgba(158, 170, 201, 0.16);
+        }
+
+        body {
+            font-family: 'Manrope', sans-serif;
+            background:
+                radial-gradient(circle at 12% 18%, rgba(172, 196, 255, 0.42), transparent 26%),
+                radial-gradient(circle at 84% 16%, rgba(255, 205, 220, 0.36), transparent 24%),
+                radial-gradient(circle at 50% 82%, rgba(216, 228, 255, 0.62), transparent 30%),
+                linear-gradient(180deg, #f8faff 0%, #f1f4fb 48%, #edf1f8 100%);
+            color: var(--text);
+            overflow: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.16) 1px, transparent 1px);
+            background-size: 28px 28px;
+            mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.3), transparent 92%);
+            opacity: 0.35;
+        }
+
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            backdrop-filter: saturate(1.08);
+        }
+
+        .display-serif {
+            font-family: 'Instrument Serif', serif;
+            letter-spacing: -0.03em;
+        }
+
+        .glass-panel {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.48));
+            border: 1px solid var(--surface-border);
+            box-shadow: var(--surface-shadow);
+            backdrop-filter: blur(24px) saturate(1.12);
+            -webkit-backdrop-filter: blur(24px) saturate(1.12);
+        }
+
+        .glass-panel-soft {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(248, 250, 255, 0.42));
+            border: 1px solid rgba(255, 255, 255, 0.74);
+            box-shadow: 0 16px 46px rgba(123, 138, 174, 0.12);
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
+        }
+
+        .glass-button {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 248, 255, 0.65));
+            border: 1px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 10px 28px rgba(109, 121, 158, 0.13);
+            backdrop-filter: blur(18px);
+        }
+
+        .liquid-button {
+            background: linear-gradient(135deg, #8278ff 0%, #6f82ff 52%, #8db4ff 100%);
+            box-shadow: 0 20px 38px rgba(111, 130, 255, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+        }
+
+        .task-card-glass {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(245, 247, 252, 0.72));
+            border: 1px solid rgba(255, 255, 255, 0.88);
+            box-shadow: 0 18px 34px rgba(105, 116, 150, 0.08);
+            backdrop-filter: blur(18px);
+        }
+
+        .char-dash-box {
+            border: 1px dashed rgba(133, 122, 255, 0.38);
+            background: rgba(255, 255, 255, 0.48);
+            transition: all 0.3s ease;
+        }
         
-        /* 选中状态视觉 */
-        .char-card-selected { border: 2px solid #7C3AED !important; background-color: #F5F3FF !important; }
+        .char-card-selected { border: 2px solid rgba(124, 113, 255, 0.92) !important; background-color: rgba(244, 242, 255, 0.98) !important; box-shadow: 0 10px 22px rgba(124, 113, 255, 0.18); }
         .char-card-selected .check-badge { display: flex !important; }
 
-        .modal-overlay { background: rgba(17, 24, 39, 0.4); backdrop-filter: blur(8px); }
+        .modal-overlay { background: rgba(17, 24, 39, 0.28); backdrop-filter: blur(14px); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         
-        /* 故事扩充动画 */
-        .agent-processing { animation: pulse 1.5s infinite; color: #7C3AED; font-weight: 600; }
+        .agent-processing { animation: pulse 1.6s infinite; color: #6f68ff; font-weight: 700; }
         .task-processing { animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        .status-marquee {
+            position: relative;
+            overflow: hidden;
+            white-space: nowrap;
+            mask-image: linear-gradient(90deg, transparent, black 10%, black 90%, transparent);
+        }
+
+        .status-marquee::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: -30%;
+            width: 28%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+            animation: statusSweep 2.8s linear infinite;
+            pointer-events: none;
+        }
+
+        .progress-liquid {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-liquid::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+            transform: translateX(-120%);
+            animation: statusSweep 2.2s linear infinite;
+        }
+
+        .welcome-orbit {
+            animation: floatSoft 8s ease-in-out infinite;
+        }
+
+        .hero-chip {
+            background: rgba(255, 255, 255, 0.54);
+            border: 1px solid rgba(255, 255, 255, 0.88);
+            box-shadow: 0 10px 22px rgba(134, 145, 180, 0.12);
+            backdrop-filter: blur(16px);
+        }
+
+        body.landing-mode #floatingInputBox {
+            bottom: 50%;
+            transform: translate(-50%, 52%);
+            max-width: 980px;
+        }
+
+        body.landing-mode #welcomeState {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        body:not(.landing-mode) #welcomeState {
+            opacity: 0;
+            transform: translateY(24px);
+            pointer-events: none;
+        }
+
+        #welcomeState,
+        #floatingInputBox {
+            transition: opacity 0.45s ease, transform 0.45s ease, bottom 0.45s ease, box-shadow 0.45s ease;
+        }
+
+        #agentStatus:empty {
+            display: none;
+        }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.58; } 100% { opacity: 1; } }
+        @keyframes statusSweep { 0% { transform: translateX(-120%); } 100% { transform: translateX(360%); } }
+        @keyframes floatSoft { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-12px); } }
     </style>
 </head>
-<body class="flex h-screen bg-white">
-
-    <aside class="w-[72px] border-r border-gray-100 flex flex-col items-center shrink-0 bg-white z-50 relative">
-        <div class="py-6 flex items-center justify-center w-full">
-            <div class="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white italic font-bold text-xl cursor-pointer">W</div>
-        </div>
-        <nav class="flex-1 w-full pt-2 flex flex-col items-center gap-4">
-            <a href="#" class="relative flex items-center justify-center w-12 h-12 rounded-xl bg-purple-50 text-purple-600 group">
-                <i data-lucide="pen-tool" class="w-5 h-5"></i>
-                <div class="absolute left-14 bg-gray-900 text-white text-xs px-2.5 py-1.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 font-medium shadow-lg">漫画工作流</div>
-            </a>
-            <a href="#" class="relative flex items-center justify-center w-12 h-12 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-gray-900 group transition-colors">
-                <i data-lucide="compass" class="w-5 h-5"></i>
-                <div class="absolute left-14 bg-gray-900 text-white text-xs px-2.5 py-1.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 font-medium shadow-lg">优秀案例</div>
-            </a>
-        </nav>
-        
-        <div class="pb-6 flex flex-col items-center gap-4">
-            <button class="relative flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors group">
-                <i data-lucide="headphones" class="w-4 h-4"></i>
-                <div class="absolute left-12 bg-gray-900 text-white text-xs px-2.5 py-1.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 font-medium shadow-lg">帮助与客服</div>
-            </button>
-        </div>
-    </aside>
+<body class="landing-mode flex h-screen">
 
     <!-- 任务列表侧边栏 -->
-    <aside class="w-64 lg:w-72 bg-[#FDFDFD] border-r border-gray-100 flex flex-col shrink-0 z-40 relative">
-        <div class="p-6 border-b border-gray-50">
-            <button onclick="createNewTask()" class="w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-md shadow-purple-200">
-                <i data-lucide="plus" class="w-4 h-4"></i> New Task
-            </button>
-        </div>
-        <div class="px-6 py-4 flex items-center justify-between">
-            <span class="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Recent Tasks</span>
-        </div>
-        <div class="flex-1 overflow-y-auto px-4 pb-6 space-y-2 no-scrollbar" id="taskListContainer">
-            <!-- Dynamic Tasks -->
-            <div id="dynamicTasksContainer" class="space-y-2"></div>
-            
-            <div class="py-4 flex items-center justify-between">
-                <span class="text-[11px] font-bold text-gray-400 uppercase tracking-widest">History Cases</span>
+    <aside class="w-[320px] shrink-0 z-40 relative p-5">
+        <div class="glass-panel h-full rounded-[34px] overflow-hidden flex flex-col">
+            <div class="px-7 py-7 border-b border-white/60">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-11 h-11 rounded-2xl liquid-button flex items-center justify-center text-white text-xl font-bold shadow-[0_12px_30px_rgba(124,113,255,0.34)]">W</div>
+                    <div>
+                        <p class="text-[11px] uppercase tracking-[0.26em] text-[#9098b2] font-extrabold">AI Comic Lab</p>
+                        <p class="text-sm text-[#66708c] font-semibold">任务工作台</p>
+                    </div>
+                </div>
+                <button onclick="createNewTask()" class="w-full liquid-button text-white py-4 rounded-[24px] font-bold transition-all flex items-center justify-center gap-2 shadow-[0_18px_40px_rgba(124,113,255,0.24)] hover:scale-[1.01] active:scale-[0.99]">
+                    <i data-lucide="plus" class="w-4 h-4"></i> New Task
+                </button>
             </div>
-            <!-- History cases (moved from header) -->
-            <div id="casesListContainer" class="space-y-2">
-                <!-- Cases will be rendered here by JS -->
+            <div class="px-7 py-5 flex items-center justify-between">
+                <span class="text-[11px] font-extrabold text-[#98a1b8] uppercase tracking-[0.22em]">Recent Tasks</span>
+                <span class="text-[10px] text-[#b0b6c7]">Live</span>
+            </div>
+            <div class="flex-1 overflow-y-auto px-5 pb-6 space-y-3 no-scrollbar" id="taskListContainer">
+                <div id="dynamicTasksContainer" class="space-y-3"></div>
+                
+                <div class="pt-4 pb-2 flex items-center justify-between">
+                    <span class="text-[11px] font-extrabold text-[#98a1b8] uppercase tracking-[0.22em]">History Cases</span>
+                    <div class="h-px flex-1 mx-3 bg-gradient-to-r from-[#d9dff0] to-transparent"></div>
+                </div>
+                <div id="casesListContainer" class="space-y-3">
+                </div>
+            </div>
+            <div class="px-7 py-5 border-t border-white/60 flex items-center gap-3 text-[#8c96af]">
+                <div class="w-10 h-10 rounded-2xl glass-button flex items-center justify-center">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-bold">Soft Glass Workspace</p>
+                    <p class="text-[11px] text-[#a1a9be]">Live generation surface</p>
+                </div>
             </div>
         </div>
     </aside>
 
-    <main class="flex-1 flex flex-col bg-[#F9FAFB] relative overflow-hidden">
-        <header class="h-16 shrink-0 flex items-center justify-between px-8 gap-4 border-b border-gray-100 bg-white sticky top-0 z-30">
-            <h1 class="text-lg font-bold text-gray-900">Workspace</h1>
+    <main class="flex-1 flex flex-col relative overflow-hidden p-5 pl-0">
+        <div class="glass-panel h-full rounded-[34px] overflow-hidden flex flex-col relative">
+        <header class="h-20 shrink-0 flex items-center justify-between px-10 gap-4 border-b border-white/60 bg-white/28 sticky top-0 z-30 backdrop-blur-xl">
+            <div>
+                <p class="text-[11px] uppercase tracking-[0.26em] text-[#97a1bd] font-extrabold mb-1">Workspace</p>
+                <h1 class="text-[28px] font-bold text-[#1a2338] display-serif">Storyboard Atelier</h1>
+            </div>
             
             <div class="flex items-center gap-6">
 
-                <a href="/settings.html" class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors">
-                    <i data-lucide="sliders-horizontal" class="w-4 h-4 text-gray-500"></i>
+                <a href="/settings.html" class="glass-button flex items-center gap-2 rounded-[18px] px-4 py-3 text-xs font-bold text-[#4f5875] hover:text-[#2e3550] transition-colors">
+                    <i data-lucide="sliders-horizontal" class="w-4 h-4 text-[#6b7696]"></i>
                     <span>模型设置</span>
                 </a>
-                <div id="providerHint" class="text-[10px] font-medium text-gray-400 max-w-[420px] hidden md:block"></div>
+                <div id="providerHint" class="text-[11px] font-semibold text-[#8e97af] max-w-[420px] hidden md:block"></div>
                 
-                <div class="text-[10px] font-bold text-green-500 bg-green-50 px-2 py-1 rounded-full uppercase tracking-widest">系统就绪</div>
-                <div class="w-8 h-8 rounded-full bg-gray-200"></div>
+                <div class="hero-chip text-[10px] font-extrabold text-[#57b07d] px-3 py-2 rounded-full uppercase tracking-[0.22em]">系统就绪</div>
+                <div class="w-11 h-11 rounded-full bg-white/65 border border-white/90 shadow-[0_10px_24px_rgba(130,142,177,0.14)]"></div>
                         </div>
         </header>
 
@@ -112,29 +273,35 @@
         <div class="flex-1 flex overflow-hidden">
             <!-- Center Canvas Area -->
             <div class="flex-1 overflow-y-auto relative flex flex-col items-center">
+                <div class="pointer-events-none absolute inset-0 overflow-hidden">
+                    <div class="welcome-orbit absolute top-[11%] left-[14%] w-48 h-48 rounded-full bg-[radial-gradient(circle,_rgba(255,255,255,0.9)_0%,_rgba(255,255,255,0.12)_62%,_transparent_72%)] blur-[2px] opacity-80"></div>
+                    <div class="welcome-orbit absolute top-[24%] right-[12%] w-72 h-72 rounded-full bg-[radial-gradient(circle,_rgba(190,211,255,0.52)_0%,_rgba(190,211,255,0.08)_58%,_transparent_72%)] opacity-70" style="animation-delay:-2.5s;"></div>
+                    <div class="welcome-orbit absolute bottom-[12%] left-[26%] w-60 h-60 rounded-full bg-[radial-gradient(circle,_rgba(255,230,237,0.56)_0%,_rgba(255,230,237,0.08)_58%,_transparent_76%)] opacity-70" style="animation-delay:-4.2s;"></div>
+                </div>
                 <!-- Welcome State -->
-                <div id="welcomeState" class="w-full max-w-4xl px-8 py-20 text-center">
-                    <h2 class="text-3xl font-bold text-gray-900 mb-4">开始您的 AI 漫画创作</h2>
-                    <p class="text-gray-500 text-sm mb-10">在右侧面板配置角色、故事及参数，一键生成高质量分镜</p>
-                    <div class="mt-4 flex items-center justify-center gap-4">
-                        <button onclick="clearHistory()" class="text-xs font-bold text-gray-400 hover:text-red-500 transition-colors flex items-center gap-1.5">
+                <div id="welcomeState" class="w-full max-w-5xl px-8 py-24 text-center relative z-10">
+                    <div class="flex justify-center mb-8">
+                        <div class="hero-chip rounded-full px-4 py-2 text-[11px] uppercase tracking-[0.28em] text-[#8e96b0] font-extrabold">Soft Glass Comic Studio</div>
+                    </div>
+                    <h2 class="display-serif text-[72px] leading-[0.95] text-[#1b2540] mb-5">从一段故事<br>漂浮出一部漫画</h2>
+                    <p class="text-[#7d88a6] text-[15px] max-w-2xl mx-auto leading-8 mb-10">保留你熟悉的工作流，把创作界面换成更柔和、更安静的液态玻璃工作台。角色、故事与分镜，都会在同一块漂浮画布上慢慢成形。</p>
+                    <div class="mt-4 flex items-center justify-center gap-3 flex-wrap">
+                        <button onclick="clearHistory()" class="glass-button text-xs font-bold text-[#7a849d] hover:text-[#d45f76] transition-colors flex items-center gap-2 px-4 py-3 rounded-full">
                             <i data-lucide="trash-2" class="w-4 h-4"></i> 清除历史记录
                         </button>
-                        <span class="text-gray-300">|</span>
-                        <button onclick="saveAsCase()" class="text-xs font-bold text-gray-400 hover:text-purple-600 transition-colors flex items-center gap-1.5">
+                        <button onclick="saveAsCase()" class="glass-button text-xs font-bold text-[#7a849d] hover:text-[#6d73f8] transition-colors flex items-center gap-2 px-4 py-3 rounded-full">
                             <i data-lucide="star" class="w-4 h-4"></i> 保存为优秀案例
                         </button>
-                        <span class="text-gray-300">|</span>
-                        <button onclick="toggleInputHeight()" class="text-xs font-bold text-purple-600 hover:text-purple-700 transition-colors flex items-center gap-1.5 bg-purple-50 px-3 py-1.5 rounded-lg">
+                        <button onclick="toggleInputHeight()" class="liquid-button text-xs font-bold text-white transition-colors flex items-center gap-2 px-5 py-3 rounded-full">
                             <i data-lucide="edit-3" class="w-4 h-4"></i> 开始创作
                         </button>
                     </div>
                 </div>
 
                 <!-- Expanded Story (Hidden by default) -->
-                <div id="expandedStoryBox" class="hidden w-full max-w-4xl px-8 mt-8 mb-4">
-                    <div class="p-5 bg-purple-50/30 border border-purple-100 rounded-2xl animate-in fade-in">
-                        <div class="flex items-center gap-2 mb-4 text-purple-600">
+                <div id="expandedStoryBox" class="hidden w-full max-w-4xl px-8 mt-8 mb-4 relative z-10">
+                    <div class="glass-panel-soft p-6 rounded-[28px] animate-in fade-in">
+                        <div class="flex items-center gap-2 mb-4 text-[#7369ff]">
                             <i data-lucide="wand-2" class="w-4 h-4"></i>
                             <span class="text-[11px] font-bold uppercase">AI 结构化故事大纲</span>
                         </div>
@@ -143,20 +310,20 @@
                 </div>
 
                 <!-- 最终生成的漫画展示区 -->
-                <div id="comicResultBox" class="hidden w-full max-w-6xl px-8 pb-20 mt-4 flex-col items-center">
+                <div id="comicResultBox" class="hidden w-full max-w-6xl px-8 pb-20 mt-4 flex-col items-center relative z-10">
                     <div class="flex justify-between items-center w-full mb-8">
-                        <h3 class="text-xl font-bold text-gray-900">最终成片</h3>
+                        <h3 class="text-[40px] display-serif text-[#1c2440]">最终成片</h3>
                         <div id="comicGenProgress" class="flex items-center gap-4 hidden">
-                            <div class="w-64 h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                                <div id="progressBar" class="h-full bg-purple-600 w-0 transition-all duration-300"></div>
+                            <div class="w-72 h-3 bg-white/55 rounded-full overflow-hidden border border-white/75 shadow-[inset_0_1px_2px_rgba(255,255,255,0.8)]">
+                                <div id="progressBar" class="progress-liquid h-full bg-[linear-gradient(90deg,#7d71ff_0%,#8aa4ff_100%)] w-0 transition-all duration-300 rounded-full"></div>
                             </div>
-                            <span id="progressText" class="text-xs font-bold text-purple-600 uppercase w-24">生成中 0/4...</span>
+                            <span id="progressText" class="status-marquee text-xs font-bold text-[#6f68ff] uppercase w-40">生成中 0/4...</span>
                         </div>
                         <div class="flex gap-3">
-                            <button type="button" id="downloadZipBtn" onclick="downloadAllPanels()" class="hidden bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm">
+                            <button type="button" id="downloadZipBtn" onclick="downloadAllPanels()" class="hidden glass-button hover:bg-white/80 text-[#4d5672] px-4 py-3 rounded-[18px] text-xs font-bold transition-all flex items-center gap-2">
                                 <i data-lucide="folder-down" class="w-4 h-4"></i> 下载全部
                             </button>
-                            <button type="button" id="downloadFullComicBtn" onclick="downloadFullComic()" class="hidden bg-black hover:bg-gray-800 text-white px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm">
+                            <button type="button" id="downloadFullComicBtn" onclick="downloadFullComic()" class="hidden liquid-button text-white px-5 py-3 rounded-[18px] text-xs font-bold transition-all flex items-center gap-2">
                                 <i data-lucide="image" class="w-4 h-4"></i> 导出长图
                             </button>
                         </div>
@@ -174,27 +341,31 @@
             </div>
 
             <!-- Floating Input Box -->
-            <div id="floatingInputBox" class="absolute bottom-8 left-1/2 transform -translate-x-1/2 w-full max-w-4xl z-50 bg-white/95 backdrop-blur shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 rounded-[32px] flex flex-col transition-all duration-300">
+            <div id="floatingInputBox" class="glass-panel absolute bottom-8 left-1/2 transform -translate-x-1/2 w-full max-w-4xl z-50 rounded-[36px] flex flex-col transition-all duration-300 overflow-hidden">
                 <!-- 顶部：文本输入区 -->
-                <div class="relative p-6 pb-2">
-                    <textarea id="storyInput" class="w-full h-12 bg-transparent border-none p-0 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0 resize-none transition-all duration-300 scrollbar-hide" placeholder="Describe what you want to generate..."></textarea>
-                    <button type="button" onclick="toggleInputHeight()" class="absolute top-6 right-6 text-gray-400 hover:text-purple-600 transition-colors bg-white/80 rounded p-1">
+                <div class="relative p-7 pb-3">
+                    <div class="absolute inset-x-7 top-5 flex items-center justify-between pointer-events-none">
+                        <div class="hero-chip px-3 py-1.5 rounded-full text-[10px] uppercase tracking-[0.24em] text-[#93a0bb] font-extrabold">Story Seed</div>
+                        <div class="text-[10px] uppercase tracking-[0.24em] text-[#adb5c7] font-bold">Liquid input dock</div>
+                    </div>
+                    <textarea id="storyInput" class="w-full h-12 bg-transparent border-none p-0 pt-10 text-[15px] text-[#212b44] placeholder-[#9ba5bd] focus:outline-none focus:ring-0 resize-none transition-all duration-300 scrollbar-hide leading-8" placeholder="Describe the scene, the feeling, or just one line of story..."></textarea>
+                    <button type="button" onclick="toggleInputHeight()" class="absolute top-6 right-6 text-[#98a3bd] hover:text-[#6f68ff] transition-colors bg-white/60 rounded-full p-2 shadow-[0_10px_20px_rgba(131,142,174,0.12)]">
                         <i data-lucide="maximize-2" id="expandIcon" class="w-4 h-4"></i>
                     </button>
                 </div>
 
                 <!-- 中部：角色列表 -->
-                <div class="px-6 py-2 flex gap-3 flex-wrap items-center min-h-[48px]" id="attachedCharacters">
-                    <button type="button" id="addCharBtn" onclick="openModal()" class="w-10 h-10 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-purple-600 transition-colors shrink-0">
+                <div class="px-7 py-3 flex gap-3 flex-wrap items-center min-h-[60px]" id="attachedCharacters">
+                    <button type="button" id="addCharBtn" onclick="openModal()" class="w-12 h-12 rounded-full bg-white/72 hover:bg-white flex items-center justify-center text-[#9aa4bc] hover:text-[#6f68ff] transition-colors shrink-0 shadow-[0_12px_24px_rgba(136,145,177,0.12)] border border-white/80">
                         <i data-lucide="plus" class="w-5 h-5"></i>
                     </button>
                 </div>
 
                 <!-- 底部：操作选项栏 -->
-                <div class="px-6 py-4 flex items-center justify-between border-t border-gray-100/50">
+                <div class="px-7 py-5 flex items-center justify-between border-t border-white/60 bg-white/18">
                     <div class="flex items-center gap-3">
                         <!-- 设置图标 -->
-                        <button type="button" class="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-50 rounded-xl relative" onclick="toggleDropdown('settingsDropdown')">
+                        <button type="button" class="text-[#95a1bb] hover:text-[#5d6785] transition-colors p-2 hover:bg-white/60 rounded-2xl relative" onclick="toggleDropdown('settingsDropdown')">
                             <i data-lucide="settings-2" class="w-4 h-4"></i>
                         </button>
                         
@@ -238,7 +409,7 @@
                         
                         <!-- 比例选择 -->
                         <div class="relative" id="ratioDropdownContainer">
-                            <button type="button" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-xs font-bold text-gray-600 transition-colors" onclick="toggleDropdown('ratioDropdown')">
+                            <button type="button" class="glass-button flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold text-[#5f6985] transition-colors" onclick="toggleDropdown('ratioDropdown')">
                                 <i data-lucide="monitor" class="w-3.5 h-3.5"></i>
                                 <span id="ratioBtnText">16:9</span>
                             </button>
@@ -258,7 +429,7 @@
 
                         <!-- 页数选择 -->
                         <div class="relative" id="pageDropdownContainer">
-                            <button type="button" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-xs font-bold text-gray-600 transition-colors" onclick="toggleDropdown('pageDropdown')">
+                            <button type="button" class="glass-button flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold text-[#5f6985] transition-colors" onclick="toggleDropdown('pageDropdown')">
                                 <i data-lucide="layers" class="w-3.5 h-3.5"></i>
                                 <span id="pageBtnText">x1</span>
                             </button>
@@ -277,27 +448,28 @@
                         </div>
 
                         <!-- AI 扩写开关 -->
-                        <label class="flex items-center gap-2 cursor-pointer ml-2">
+                        <label class="flex items-center gap-2 cursor-pointer ml-2 px-3 py-2 rounded-full bg-white/42 border border-white/70">
                             <div class="relative">
                                 <input type="checkbox" id="enableExpansion" checked class="sr-only" onchange="toggleExpansionVisual(this)">
                                 <div class="block bg-purple-600 w-8 h-5 rounded-full transition-colors duration-300" id="expansionToggleBg"></div>
                                 <div class="dot absolute left-1 top-1 bg-white w-3 h-3 rounded-full transition-transform duration-300 translate-x-3" id="expansionToggleDot"></div>
                             </div>
-                            <span class="text-xs font-bold text-gray-500">AI 扩写</span>
+                            <span class="text-xs font-bold text-[#6d7690]">AI 扩写</span>
                         </label>
                     </div>
                     
                     <div class="flex items-center gap-3">
-                        <div id="agentStatus" class="text-[11px] font-bold text-purple-600 hidden mr-2">处理中...</div>
+                        <div id="agentStatus" class="status-marquee text-[11px] font-bold text-[#6f68ff] mr-2 max-w-[260px]"></div>
                         
                         <!-- 一键生成按钮 -->
-                        <button type="button" id="oneClickGenerateBtn" onclick="handleOneClickGenerate()" class="bg-[#7C3AED] hover:bg-[#6D28D9] text-white px-6 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-200 text-sm shrink-0">
+                        <button type="button" id="oneClickGenerateBtn" onclick="handleOneClickGenerate()" class="liquid-button text-white px-7 py-3 rounded-[22px] font-bold transition-all flex items-center justify-center gap-2 shadow-lg text-sm shrink-0 hover:scale-[1.01] active:scale-[0.99]">
                             <span>Generate</span>
                             <i data-lucide="sparkles" class="w-4 h-4"></i>
                         </button>
                     </div>
                 </div>
             </div>
+        </div>
         </div>
     </main>
 
@@ -599,6 +771,12 @@
             hint.textContent = `当前将使用 ${textModel?.provider || 'unknown'} Key 生成文本，使用 ${imageModel?.provider || 'unknown'} Key 生成图片`;
         }
 
+        function syncWorkspaceMode() {
+            const storyValue = document.getElementById('storyInput')?.value?.trim() || '';
+            const shouldUseLandingMode = !state.hasGeneratedOnce && storyValue.length === 0 && (state.characters || []).length === 0 && (state.executions || []).length === 0;
+            document.body.classList.toggle('landing-mode', shouldUseLandingMode);
+        }
+
 
         function handleCustomStyleImage(event) {
             const file = event.target.files[0];
@@ -688,6 +866,8 @@
                 // Initialize default task
                 createNewTask();
             }
+
+            syncWorkspaceMode();
         });
 
         function saveStateToLocal() {
@@ -1191,6 +1371,22 @@
             return parseDataUrlToInlineData(imageData);
         }
 
+        function normalizeCharacterName(name) {
+            return String(name || '')
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, ' ');
+        }
+
+        function findExistingCharacterByName(characters, candidateName) {
+            const normalizedCandidateName = normalizeCharacterName(candidateName);
+            if (!normalizedCandidateName) {
+                return null;
+            }
+
+            return (characters || []).find((character) => normalizeCharacterName(character.name) === normalizedCandidateName) || null;
+        }
+
         function isTimeoutError(error) {
             return error instanceof Error && /timed out|timeout/i.test(error.message);
         }
@@ -1631,7 +1827,7 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                     (task.selectedCharacters || []).map((character) => character.id)
                 );
                 const charPromises = extractedChars.map(async (char) => {
-                    const exists = task.selectedCharacters.find(c => c.name.toLowerCase().includes(char.name.toLowerCase()) || char.name.toLowerCase().includes(c.name.toLowerCase()));
+                    const exists = findExistingCharacterByName(task.selectedCharacters, char.name);
                     if (exists) {
                         return { status: 'skipped', name: char.name };
                     }
@@ -2823,17 +3019,17 @@ Layout Logic: ${page.layout_logic}`;
                 }
                 
                 html += `
-                    <div onclick="switchTask('${task.id}')" class="p-4 rounded-xl bg-white border ${isActive ? 'border-purple-400 shadow-md' : 'border-gray-100 shadow-sm'} hover:border-purple-200 cursor-pointer relative overflow-hidden group transition-all">
-                        ${isActive ? '<div class="absolute left-0 top-0 bottom-0 w-1 bg-purple-500"></div>' : ''}
+                    <div onclick="switchTask('${task.id}')" class="task-card-glass p-4 rounded-[24px] ${isActive ? 'ring-2 ring-[#8f84ff]/70 shadow-[0_20px_38px_rgba(124,113,255,0.16)]' : 'hover:ring-1 hover:ring-white/80'} cursor-pointer relative overflow-hidden group transition-all">
+                        ${isActive ? '<div class="absolute inset-0 bg-[linear-gradient(135deg,rgba(124,113,255,0.12),transparent_36%)]"></div>' : ''}
                         <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-lg ${iconColor} flex items-center justify-center shrink-0">
+                            <div class="w-11 h-11 rounded-[18px] ${iconColor} flex items-center justify-center shrink-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
                                 ${iconHtml}
                             </div>
                             <div class="flex-1 min-w-0">
-                                <h4 class="text-sm font-bold text-gray-900 truncate">${task.title || 'Draft Task'}</h4>
-                                <p class="text-[11px] ${statusColor} font-medium">${statusText}</p>
+                                <h4 class="text-sm font-extrabold text-[#1f2740] truncate">${task.title || 'Draft Task'}</h4>
+                                <p class="text-[11px] ${statusColor} font-semibold">${statusText}</p>
                             </div>
-                            <button onclick="event.stopPropagation(); deleteTask('${task.id}')" class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all shrink-0 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50">
+                            <button onclick="event.stopPropagation(); deleteTask('${task.id}')" class="opacity-0 group-hover:opacity-100 text-[#9aa3ba] hover:text-red-500 transition-all shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/70">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
                         </div>
@@ -2906,7 +3102,7 @@ Layout Logic: ${page.layout_logic}`;
             syncDropdownUI();
             
             document.getElementById('attachedCharacters').innerHTML = `
-                <button type="button" id="addCharBtn" onclick="openModal()" class="w-16 h-16 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-600 transition-colors">
+                <button type="button" id="addCharBtn" onclick="openModal()" class="w-16 h-16 rounded-[22px] border border-white/80 bg-white/62 shadow-[0_14px_26px_rgba(134,145,179,0.12)] flex flex-col items-center justify-center text-[#98a3bd] hover:bg-white hover:text-[#6f68ff] transition-colors">
                     <i data-lucide="plus" class="w-5 h-5 mb-1"></i>
                     <span class="text-[9px] font-bold uppercase tracking-wider">角色</span>
                 </button>
@@ -2977,6 +3173,7 @@ Layout Logic: ${page.layout_logic}`;
             }
             
             renderTasks();
+            syncWorkspaceMode();
             lucide.createIcons();
             
             const drawer = document.getElementById('configDrawer');
@@ -3010,6 +3207,7 @@ Layout Logic: ${page.layout_logic}`;
             const oldTaskId = state.currentTaskId;
             state.currentTaskId = null; // force reload UI
             switchTask(newTaskId);
+            syncWorkspaceMode();
         }
 
     </script>
