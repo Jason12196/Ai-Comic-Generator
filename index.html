@@ -46,17 +46,9 @@
             background-image:
                 linear-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(255, 255, 255, 0.16) 1px, transparent 1px);
-            background-size: 28px 28px;
+            background-size: 36px 36px;
             mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.3), transparent 92%);
-            opacity: 0.35;
-        }
-
-        body::after {
-            content: "";
-            position: fixed;
-            inset: 0;
-            pointer-events: none;
-            backdrop-filter: saturate(1.08);
+            opacity: 0.16;
         }
 
         .display-serif {
@@ -68,23 +60,23 @@
             background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.48));
             border: 1px solid var(--surface-border);
             box-shadow: var(--surface-shadow);
-            backdrop-filter: blur(24px) saturate(1.12);
-            -webkit-backdrop-filter: blur(24px) saturate(1.12);
+            backdrop-filter: blur(14px) saturate(1.06);
+            -webkit-backdrop-filter: blur(14px) saturate(1.06);
         }
 
         .glass-panel-soft {
             background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(248, 250, 255, 0.42));
             border: 1px solid rgba(255, 255, 255, 0.74);
             box-shadow: 0 16px 46px rgba(123, 138, 174, 0.12);
-            backdrop-filter: blur(22px);
-            -webkit-backdrop-filter: blur(22px);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
         }
 
         .glass-button {
             background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 248, 255, 0.65));
             border: 1px solid rgba(255, 255, 255, 0.95);
             box-shadow: 0 10px 28px rgba(109, 121, 158, 0.13);
-            backdrop-filter: blur(18px);
+            backdrop-filter: blur(8px);
         }
 
         .liquid-button {
@@ -96,7 +88,7 @@
             background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(245, 247, 252, 0.72));
             border: 1px solid rgba(255, 255, 255, 0.88);
             box-shadow: 0 18px 34px rgba(105, 116, 150, 0.08);
-            backdrop-filter: blur(18px);
+            backdrop-filter: blur(8px);
         }
 
         .char-dash-box {
@@ -108,7 +100,7 @@
         .char-card-selected { border: 2px solid rgba(124, 113, 255, 0.92) !important; background-color: rgba(244, 242, 255, 0.98) !important; box-shadow: 0 10px 22px rgba(124, 113, 255, 0.18); }
         .char-card-selected .check-badge { display: flex !important; }
 
-        .modal-overlay { background: rgba(17, 24, 39, 0.28); backdrop-filter: blur(14px); }
+        .modal-overlay { background: rgba(17, 24, 39, 0.24); backdrop-filter: blur(10px); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         
         .agent-processing { animation: pulse 1.6s infinite; color: #6f68ff; font-weight: 700; }
@@ -148,20 +140,20 @@
         }
 
         .welcome-orbit {
-            animation: floatSoft 8s ease-in-out infinite;
+            animation: floatSoft 10s ease-in-out infinite;
         }
 
         .hero-chip {
             background: rgba(255, 255, 255, 0.54);
             border: 1px solid rgba(255, 255, 255, 0.88);
             box-shadow: 0 10px 22px rgba(134, 145, 180, 0.12);
-            backdrop-filter: blur(16px);
+            backdrop-filter: blur(8px);
         }
 
         body.landing-mode #floatingInputBox {
-            bottom: 50%;
-            transform: translate(-50%, 52%);
-            max-width: 980px;
+            bottom: 15%;
+            transform: translate(-50%, 0);
+            max-width: 1040px;
         }
 
         body.landing-mode #welcomeState {
@@ -186,7 +178,7 @@
 
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.58; } 100% { opacity: 1; } }
         @keyframes statusSweep { 0% { transform: translateX(-120%); } 100% { transform: translateX(360%); } }
-        @keyframes floatSoft { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-12px); } }
+        @keyframes floatSoft { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-8px); } }
     </style>
 </head>
 <body class="landing-mode flex h-screen">
@@ -249,7 +241,8 @@
                 <div id="providerHint" class="text-[11px] font-semibold text-[#8e97af] max-w-[420px] hidden md:block"></div>
                 
                 <div class="hero-chip text-[10px] font-extrabold text-[#57b07d] px-3 py-2 rounded-full uppercase tracking-[0.22em]">系统就绪</div>
-                <div class="w-11 h-11 rounded-full bg-white/65 border border-white/90 shadow-[0_10px_24px_rgba(130,142,177,0.14)]"></div>
+                <div id="authUserChip" class="hidden hero-chip text-[11px] font-bold text-[#5d6785] px-4 py-2 rounded-full"></div>
+                <button id="authActionButton" type="button" onclick="handleAuthAction()" class="glass-button rounded-[18px] px-4 py-3 text-xs font-bold text-[#4f5875] hover:text-[#2e3550] transition-colors">登录 / 注册</button>
                         </div>
         </header>
 
@@ -279,12 +272,12 @@
                     <div class="welcome-orbit absolute bottom-[12%] left-[26%] w-60 h-60 rounded-full bg-[radial-gradient(circle,_rgba(255,230,237,0.56)_0%,_rgba(255,230,237,0.08)_58%,_transparent_76%)] opacity-70" style="animation-delay:-4.2s;"></div>
                 </div>
                 <!-- Welcome State -->
-                <div id="welcomeState" class="w-full max-w-5xl px-8 py-24 text-center relative z-10">
-                    <div class="flex justify-center mb-8">
+                <div id="welcomeState" class="w-full max-w-4xl px-8 pt-16 pb-32 text-center relative z-10">
+                    <div class="flex justify-center mb-6">
                         <div class="hero-chip rounded-full px-4 py-2 text-[11px] uppercase tracking-[0.28em] text-[#8e96b0] font-extrabold">Soft Glass Comic Studio</div>
                     </div>
-                    <h2 class="display-serif text-[72px] leading-[0.95] text-[#1b2540] mb-5">从一段故事<br>漂浮出一部漫画</h2>
-                    <p class="text-[#7d88a6] text-[15px] max-w-2xl mx-auto leading-8 mb-10">保留你熟悉的工作流，把创作界面换成更柔和、更安静的液态玻璃工作台。角色、故事与分镜，都会在同一块漂浮画布上慢慢成形。</p>
+                    <h2 class="display-serif text-[58px] leading-[0.98] text-[#1b2540] mb-4">从一段故事<br>漂浮出一部漫画</h2>
+                    <p class="text-[#7d88a6] text-[14px] max-w-xl mx-auto leading-7 mb-8">保留你熟悉的工作流，把创作界面换成更柔和、更安静的液态玻璃工作台。角色、故事与分镜，都会在同一块漂浮画布上慢慢成形。</p>
                     <div class="mt-4 flex items-center justify-center gap-3 flex-wrap">
                         <button onclick="clearHistory()" class="glass-button text-xs font-bold text-[#7a849d] hover:text-[#d45f76] transition-colors flex items-center gap-2 px-4 py-3 rounded-full">
                             <i data-lucide="trash-2" class="w-4 h-4"></i> 清除历史记录
@@ -636,6 +629,36 @@
         </div>
     </div>
 
+    <div id="authModal" class="hidden fixed inset-0 z-[90] modal-overlay items-center justify-center p-6">
+        <div class="glass-panel w-full max-w-[420px] rounded-[30px] p-7 shadow-[0_24px_70px_rgba(86,98,139,0.22)]">
+            <div class="flex items-start justify-between gap-4 mb-5">
+                <div>
+                    <p class="text-[11px] uppercase tracking-[0.24em] text-[#98a1b8] font-extrabold mb-2">Cloud Account</p>
+                    <h3 id="authModalTitle" class="text-2xl font-bold text-[#1d2438] display-serif">登录你的工作台</h3>
+                </div>
+                <button type="button" onclick="closeAuthModal()" class="w-10 h-10 rounded-full glass-button flex items-center justify-center text-[#7f89a6] hover:text-[#2e3550]">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div class="flex gap-2 mb-5">
+                <button type="button" id="loginModeBtn" onclick="setAuthMode('login')" class="flex-1 rounded-full px-4 py-3 text-xs font-bold liquid-button text-white">登录</button>
+                <button type="button" id="registerModeBtn" onclick="setAuthMode('register')" class="flex-1 rounded-full px-4 py-3 text-xs font-bold glass-button text-[#63708e]">注册</button>
+            </div>
+            <div class="space-y-4">
+                <label class="block">
+                    <span class="block text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#98a1b8] mb-2">用户名</span>
+                    <input id="authUsernameInput" type="text" autocomplete="username" class="w-full rounded-[18px] border border-white/90 bg-white/80 px-4 py-3 text-sm font-semibold text-[#1f2740] outline-none focus:ring-2 focus:ring-[#8f84ff]/40" placeholder="至少 3 个字符">
+                </label>
+                <label class="block">
+                    <span class="block text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#98a1b8] mb-2">密码</span>
+                    <input id="authPasswordInput" type="password" autocomplete="current-password" class="w-full rounded-[18px] border border-white/90 bg-white/80 px-4 py-3 text-sm font-semibold text-[#1f2740] outline-none focus:ring-2 focus:ring-[#8f84ff]/40" placeholder="至少 6 位">
+                </label>
+            </div>
+            <p id="authStatusMessage" class="text-sm font-semibold text-[#7c86a0] min-h-[24px] mt-4"></p>
+            <button id="authSubmitButton" type="button" onclick="submitAuthForm()" class="mt-2 w-full liquid-button text-white py-4 rounded-[22px] font-bold transition-all hover:scale-[1.01] active:scale-[0.99]">登录并同步任务</button>
+        </div>
+    </div>
+
     <script>
         lucide.createIcons();
 
@@ -643,6 +666,7 @@
         let state = {
             tasks: [],
             currentTaskId: null,
+            user: null,
             characters: [], 
             selectedCharacters: [], 
             pages: 5,
@@ -663,6 +687,8 @@
         let availableImageModels = [];
         let defaultTextModelKey = 'google.gemini-3.1-flash-lite';
         let defaultImageModelKey = 'google.gemini-3-pro-image-preview';
+        let authMode = 'login';
+        let taskSyncTimer = null;
 
         function renderModelSelectOptions(selectId, models, savedValue) {
             const select = document.getElementById(selectId);
@@ -777,6 +803,280 @@
             document.body.classList.toggle('landing-mode', shouldUseLandingMode);
         }
 
+        function cloneSerializable(value) {
+            return JSON.parse(JSON.stringify(value));
+        }
+
+        function getStoredTaskState() {
+            const savedState = localStorage.getItem('aiComicState');
+            if (!savedState) {
+                return { tasks: [], currentTaskId: null };
+            }
+
+            try {
+                const parsedState = JSON.parse(savedState);
+                if (parsedState.tasks && parsedState.tasks.length > 0) {
+                    return {
+                        tasks: parsedState.tasks,
+                        currentTaskId: parsedState.currentTaskId || parsedState.tasks[0].id
+                    };
+                }
+
+                const legacyTask = {
+                    id: Date.now().toString(),
+                    title: "Legacy Task",
+                    createdAt: new Date().toLocaleString(),
+                    hasGeneratedOnce: false,
+                    executions: [],
+                    characters: parsedState.characters || [],
+                    selectedCharacters: parsedState.selectedCharacters || [],
+                    pages: parsedState.pages || "5",
+                    ratio: parsedState.ratio || "3:4",
+                    style: parsedState.style || "auto",
+                    originalStory: parsedState.originalStory || "",
+                    expandedStory: parsedState.expandedStory || "",
+                    generatedComicPages: parsedState.generatedComicPages || null
+                };
+
+                return {
+                    tasks: [legacyTask],
+                    currentTaskId: legacyTask.id
+                };
+            } catch (error) {
+                console.log("Failed to restore state", error);
+                return { tasks: [], currentTaskId: null };
+            }
+        }
+
+        function normalizeTaskFromServer(taskRecord) {
+            return {
+                ...cloneSerializable(taskRecord.payload || {}),
+                id: taskRecord.id,
+                title: taskRecord.title,
+                createdAt: taskRecord.createdAt,
+                updatedAt: taskRecord.updatedAt
+            };
+        }
+
+        function updateAuthUI() {
+            const authButton = document.getElementById('authActionButton');
+            const userChip = document.getElementById('authUserChip');
+            if (!authButton || !userChip) return;
+
+            if (state.user) {
+                authButton.textContent = '退出登录';
+                userChip.textContent = `@${state.user.username}`;
+                userChip.classList.remove('hidden');
+            } else {
+                authButton.textContent = '登录 / 注册';
+                userChip.classList.add('hidden');
+                userChip.textContent = '';
+            }
+        }
+
+        function setAuthStatus(message, isError = false) {
+            const status = document.getElementById('authStatusMessage');
+            if (!status) return;
+            status.textContent = message || '';
+            status.className = `text-sm font-semibold min-h-[24px] mt-4 ${isError ? 'text-[#d45f76]' : 'text-[#7c86a0]'}`;
+        }
+
+        function setAuthMode(mode) {
+            authMode = mode;
+            const loginBtn = document.getElementById('loginModeBtn');
+            const registerBtn = document.getElementById('registerModeBtn');
+            const title = document.getElementById('authModalTitle');
+            const submit = document.getElementById('authSubmitButton');
+
+            if (!loginBtn || !registerBtn || !title || !submit) return;
+
+            const loginActive = mode === 'login';
+            loginBtn.className = `flex-1 rounded-full px-4 py-3 text-xs font-bold ${loginActive ? 'liquid-button text-white' : 'glass-button text-[#63708e]'}`;
+            registerBtn.className = `flex-1 rounded-full px-4 py-3 text-xs font-bold ${loginActive ? 'glass-button text-[#63708e]' : 'liquid-button text-white'}`;
+            title.textContent = loginActive ? '登录你的工作台' : '创建你的工作台账号';
+            submit.textContent = loginActive ? '登录并同步任务' : '注册并创建云端任务库';
+            setAuthStatus('');
+        }
+
+        function openAuthModal(mode = 'login') {
+            setAuthMode(mode);
+            document.getElementById('authModal').classList.remove('hidden');
+            document.getElementById('authModal').classList.add('flex');
+            document.getElementById('authUsernameInput').focus();
+            lucide.createIcons();
+        }
+
+        function closeAuthModal() {
+            const modal = document.getElementById('authModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            setAuthStatus('');
+        }
+
+        function handleAuthAction() {
+            if (state.user) {
+                handleLogout();
+                return;
+            }
+
+            openAuthModal('login');
+        }
+
+        async function loadAuthSession() {
+            try {
+                const response = await apiRequest('/auth/me');
+                state.user = response.data.user;
+            } catch {
+                state.user = null;
+            }
+
+            updateAuthUI();
+        }
+
+        async function maybeImportLocalTasksToCloud(localTaskState) {
+            if (!state.user || !localTaskState.tasks.length) return [];
+
+            const remoteResponse = await apiRequest('/tasks');
+            const remoteTasks = (remoteResponse.data.tasks || []).map(normalizeTaskFromServer);
+            if (remoteTasks.length > 0) {
+                return remoteTasks;
+            }
+
+            for (const task of localTaskState.tasks) {
+                await apiRequest('/tasks', {
+                    method: 'POST',
+                    body: JSON.stringify({ task })
+                });
+            }
+
+            return localTaskState.tasks.map(cloneSerializable);
+        }
+
+        async function hydrateTasksFromSource(tasks, preferredTaskId = null) {
+            state.tasks = tasks.map(cloneSerializable);
+            if (state.tasks.length === 0) {
+                createNewTask();
+                return;
+            }
+
+            const nextTaskId = preferredTaskId && state.tasks.some(task => task.id === preferredTaskId)
+                ? preferredTaskId
+                : state.tasks[0].id;
+
+            state.currentTaskId = null;
+            switchTask(nextTaskId);
+        }
+
+        async function initializeTaskState() {
+            const localTaskState = getStoredTaskState();
+
+            if (state.user) {
+                const remoteTasks = await maybeImportLocalTasksToCloud(localTaskState);
+                if (remoteTasks.length > 0) {
+                    await hydrateTasksFromSource(remoteTasks, localTaskState.currentTaskId);
+                    return;
+                }
+
+                createNewTask();
+                return;
+            }
+
+            if (localTaskState.tasks.length > 0) {
+                await hydrateTasksFromSource(localTaskState.tasks, localTaskState.currentTaskId);
+            } else {
+                createNewTask();
+            }
+        }
+
+        async function submitAuthForm() {
+            const username = document.getElementById('authUsernameInput').value.trim();
+            const password = document.getElementById('authPasswordInput').value;
+            const submitButton = document.getElementById('authSubmitButton');
+
+            if (!username || !password) {
+                setAuthStatus('请先填写用户名和密码', true);
+                return;
+            }
+
+            submitButton.disabled = true;
+            setAuthStatus('正在连接你的云端工作台...');
+
+            try {
+                const endpoint = authMode === 'login' ? '/auth/login' : '/auth/register';
+                const response = await apiRequest(endpoint, {
+                    method: 'POST',
+                    body: JSON.stringify({ username, password })
+                });
+
+                state.user = response.data.user;
+                updateAuthUI();
+                closeAuthModal();
+                await initializeTaskState();
+                renderTasks();
+                setAuthStatus('');
+            } catch (error) {
+                setAuthStatus(error.message || '账号连接失败', true);
+            } finally {
+                submitButton.disabled = false;
+            }
+        }
+
+        async function handleLogout() {
+            try {
+                await apiRequest('/auth/logout', { method: 'POST' });
+            } catch (error) {
+                console.warn('Logout failed', error);
+            }
+
+            state.user = null;
+            updateAuthUI();
+            await initializeTaskState();
+            renderTasks();
+        }
+
+        function scheduleTaskSync(task, immediate = false) {
+            if (!state.user || !task || !task.id) return;
+
+            const persist = async () => {
+                try {
+                    const response = await apiRequest('/tasks', {
+                        method: 'POST',
+                        body: JSON.stringify({ task })
+                    });
+                    const savedTask = normalizeTaskFromServer(response.data.task);
+                    const targetIndex = state.tasks.findIndex(item => item.id === savedTask.id);
+                    if (targetIndex !== -1) {
+                        state.tasks[targetIndex] = savedTask;
+                        if (savedTask.id === state.currentTaskId) {
+                            state.currentTaskId = savedTask.id;
+                        }
+                        renderTasks();
+                    }
+                } catch (error) {
+                    console.warn('Failed to sync task to backend', error);
+                }
+            };
+
+            if (immediate) {
+                if (taskSyncTimer) clearTimeout(taskSyncTimer);
+                persist();
+                return;
+            }
+
+            if (taskSyncTimer) clearTimeout(taskSyncTimer);
+            taskSyncTimer = setTimeout(persist, 500);
+        }
+
+        async function deleteTaskFromBackend(taskId) {
+            if (!state.user) return;
+
+            try {
+                await apiRequest(`/tasks/${taskId}`, { method: 'DELETE' });
+            } catch (error) {
+                console.warn('Failed to delete remote task', error);
+            }
+        }
+
 
         function handleCustomStyleImage(event) {
             const file = event.target.files[0];
@@ -823,56 +1123,15 @@
             syncApiModeUI();
             testApiKey();
             renderCases();
-
-            const savedState = localStorage.getItem('aiComicState');
-            let hasLoadedTasks = false;
-            
-            if (savedState) {
-                try {
-                    const parsedState = JSON.parse(savedState);
-                    if (parsedState.tasks && parsedState.tasks.length > 0) {
-                        state.tasks = parsedState.tasks;
-                        state.currentTaskId = parsedState.currentTaskId || parsedState.tasks[0].id;
-                        switchTask(state.currentTaskId);
-                        hasLoadedTasks = true;
-                    } else {
-                        // Migration from old state format
-                        const legacyTask = {
-                            id: Date.now().toString(),
-                            title: "Legacy Task",
-                            createdAt: new Date().toLocaleString(),
-                            hasGeneratedOnce: false,
-                            executions: [],
-                            characters: parsedState.characters || [],
-                            selectedCharacters: parsedState.selectedCharacters || [],
-                            pages: parsedState.pages || "5",
-                            ratio: parsedState.ratio || "3:4",
-                            style: parsedState.style || "auto",
-                            originalStory: parsedState.originalStory || "",
-                            expandedStory: parsedState.expandedStory || "",
-                            generatedComicPages: parsedState.generatedComicPages || null
-                        };
-                        state.tasks.push(legacyTask);
-                        state.currentTaskId = legacyTask.id;
-                        switchTask(legacyTask.id);
-                        hasLoadedTasks = true;
-                    }
-                } catch(e) {
-                    console.log("Failed to restore state", e);
-                }
-            }
-            
-            if (!hasLoadedTasks) {
-                // Initialize default task
-                createNewTask();
-            }
-
+            await loadAuthSession();
+            await initializeTaskState();
             syncWorkspaceMode();
         });
 
         function saveStateToLocal() {
+            let currentTask = null;
             try {
-                saveCurrentTask();
+                currentTask = saveCurrentTask();
                 
                 const attemptSave = (tasksToSave) => {
                     localStorage.setItem('aiComicState', JSON.stringify({
@@ -926,6 +1185,10 @@
             } catch(e) {
                 console.warn("Could not save state completely", e);
             }
+
+            if (currentTask) {
+                scheduleTaskSync(cloneSerializable(currentTask));
+            }
         }
 
         // Save on change
@@ -959,8 +1222,20 @@
         });
         function clearHistory() {
             if (confirm("确定要清除所有历史记录（包括已保存的角色和漫画）吗？")) {
-                localStorage.removeItem('aiComicState');
-                location.reload();
+                const finishClear = () => {
+                    localStorage.removeItem('aiComicState');
+                    localStorage.removeItem('aiComicCases');
+                    location.reload();
+                };
+
+                if (state.user) {
+                    apiRequest('/tasks', { method: 'DELETE' })
+                        .catch((error) => console.warn('Failed to clear remote tasks', error))
+                        .finally(finishClear);
+                    return;
+                }
+
+                finishClear();
             }
         }
         
@@ -1025,26 +1300,34 @@
                 if (existing) savedCases = JSON.parse(existing);
             } catch(e) {}
             
-            // Build default hardcoded cases plus dynamic ones
             let html = '';
+
+            if (savedCases.length === 0) {
+                casesContainer.innerHTML = `
+                    <div class="task-card-glass rounded-[24px] px-5 py-6 text-center">
+                        <div class="w-11 h-11 rounded-[18px] mx-auto mb-3 bg-white/80 border border-white/90 shadow-[0_10px_22px_rgba(130,142,177,0.1)] flex items-center justify-center text-[#9aa3bd]">
+                            <i data-lucide="archive" class="w-4 h-4"></i>
+                        </div>
+                        <p class="text-sm font-bold text-[#63708e]">还没有保存的案例</p>
+                        <p class="text-[11px] text-[#a0a9bf] mt-1 leading-5">生成完成后点击“保存为优秀案例”，这里才会出现真实内容。</p>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
             
-            const allCases = [
-                ...savedCases.map(c => ({...c, isCustom: true})),
-                { title: "赛博朋克城市", seed: "cyber", isCustom: false },
-                { title: "魔法学院日常", seed: "magic", isCustom: false },
-                { title: "太空探险队", seed: "space", isCustom: false }
-            ];
-            
-            allCases.forEach(c => {
-                const caseDataStr = c.isCustom ? encodeURIComponent(JSON.stringify(c.state)) : '';
-                
+            savedCases.forEach(c => {
+                const caseDataStr = encodeURIComponent(JSON.stringify(c.state));
                 html += `
-                    <div ${c.isCustom ? `onclick="loadCase('${caseDataStr}')"` : 'onclick="alert(\'默认案例暂未配置详细数据\')"' } class="p-4 rounded-xl bg-white border border-gray-100 hover:border-purple-200 hover:shadow-md transition-all cursor-pointer group">
+                    <div onclick="loadCase('${caseDataStr}')" class="task-card-glass p-4 rounded-[24px] hover:ring-1 hover:ring-white/80 transition-all cursor-pointer group">
                         <div class="flex items-center gap-3">
-                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${c.seed}" class="w-10 h-10 rounded-lg border border-gray-100 bg-gray-50 object-cover">
+                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${c.seed}" class="w-11 h-11 rounded-[18px] border border-white/90 bg-white/70 object-cover shadow-[0_8px_18px_rgba(130,142,177,0.08)]">
                             <div class="flex-1 min-w-0">
-                                <h4 class="text-sm font-bold text-gray-900 truncate group-hover:text-purple-600 transition-colors">${c.title}</h4>
-                                <p class="text-[11px] text-gray-400 font-medium">Completed</p>
+                                <h4 class="text-sm font-extrabold text-[#1f2740] truncate group-hover:text-[#6f68ff] transition-colors">${c.title}</h4>
+                                <p class="text-[11px] text-[#96a0b8] font-semibold">Saved case</p>
+                            </div>
+                            <div class="text-[#b0b7ca] group-hover:text-[#6f68ff] transition-colors">
+                                <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
                             </div>
                         </div>
                     </div>
@@ -1235,6 +1518,7 @@
 
         async function apiRequest(path, options = {}) {
             const response = await fetch(`${API_BASE_URL}${path}`, {
+                credentials: "include",
                 headers: {
                     "Content-Type": "application/json",
                     ...(options.headers || {})
@@ -2995,6 +3279,7 @@ Layout Logic: ${page.layout_logic}`;
             task.hasGeneratedOnce = state.hasGeneratedOnce;
             task.executions = [...state.executions];
             task.generatedComicPages = state.generatedComicPages ? JSON.parse(JSON.stringify(state.generatedComicPages)) : null;
+            return task;
         }
 
         function renderTasks() {
@@ -3003,6 +3288,20 @@ Layout Logic: ${page.layout_logic}`;
             let html = '';
             
             const sortedTasks = [...state.tasks].reverse();
+
+            if (sortedTasks.length === 0) {
+                container.innerHTML = `
+                    <div class="task-card-glass rounded-[24px] px-5 py-6 text-center">
+                        <div class="w-11 h-11 rounded-[18px] mx-auto mb-3 bg-white/80 border border-white/90 shadow-[0_10px_22px_rgba(130,142,177,0.1)] flex items-center justify-center text-[#9aa3bd]">
+                            <i data-lucide="file-plus-2" class="w-4 h-4"></i>
+                        </div>
+                        <p class="text-sm font-bold text-[#63708e]">还没有任务</p>
+                        <p class="text-[11px] text-[#a0a9bf] mt-1 leading-5">点击上方 New Task，新建一个真正的漫画创作任务。</p>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
             
             sortedTasks.forEach(task => {
                 const isActive = task.id === state.currentTaskId;
@@ -3047,6 +3346,7 @@ Layout Logic: ${page.layout_logic}`;
             if (taskIndex === -1) return;
             
             state.tasks.splice(taskIndex, 1);
+            deleteTaskFromBackend(taskId);
             
             if (state.currentTaskId === taskId) {
                 if (state.tasks.length > 0) {
@@ -3069,7 +3369,10 @@ Layout Logic: ${page.layout_logic}`;
             if (taskId === state.currentTaskId) {
                 return;
             }
-            saveCurrentTask();
+            const previousTask = saveCurrentTask();
+            if (previousTask) {
+                scheduleTaskSync(cloneSerializable(previousTask), true);
+            }
             const task = state.tasks.find(t => t.id === taskId);
             if (!task) return;
             
@@ -3182,7 +3485,10 @@ Layout Logic: ${page.layout_logic}`;
         }
 
         function createNewTask() {
-            saveCurrentTask();
+            const previousTask = saveCurrentTask();
+            if (previousTask) {
+                scheduleTaskSync(cloneSerializable(previousTask), true);
+            }
             
             const newTaskId = Date.now().toString();
             const newTask = {
@@ -3207,6 +3513,7 @@ Layout Logic: ${page.layout_logic}`;
             const oldTaskId = state.currentTaskId;
             state.currentTaskId = null; // force reload UI
             switchTask(newTaskId);
+            saveStateToLocal();
             syncWorkspaceMode();
         }
 
