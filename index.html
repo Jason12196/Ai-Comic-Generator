@@ -1423,9 +1423,10 @@ Professional character turnaround sheet, clean light gray studio background, fro
         async function apiCharacterDesign(charObj) {
             const selection = getRuntimeModelSelection();
             const selectedImageModel = getModelByKeyFromCache(selection.imageModelKey);
+            const usesGoogleImageModel = selectedImageModel?.provider === 'google';
 
             const tryGenerate = async (useProModel = false) => {
-                const overrideModelKey = useProModel && selectedImageModel?.provider === 'google'
+                const overrideModelKey = useProModel && usesGoogleImageModel
                     ? MODELS.IMAGE
                     : selection.imageModelKey;
                 const prompt = `Generate a production-ready character turnaround sheet on a clean light gray studio background. IMPORTANT: You MUST output an image. DO NOT output text. NO WATERMARKS.
@@ -1442,17 +1443,25 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                     modelKeyOverride: overrideModelKey,
                     apiKeyOverride: selection.imageApiKey
                 });
-                return result.images?.[0] || null;
+                const image = result.images?.[0];
+                if (!image) {
+                    throw new Error(`Character image generation returned no image for ${charObj.name}`);
+                }
+                return image;
             };
 
             try {
                 return await tryGenerate(false);
             } catch (err) {
                 console.log("apiCharacterDesign tryGenerate(false) caught error:", err, "message:", err.message);
+                if (!usesGoogleImageModel) {
+                    throw new Error(`Character design generation failed for ${charObj.name}: ${err.message}`);
+                }
+
                 try {
                     return await tryGenerate(true);
-                } catch (_secondError) {
-                    return null;
+                } catch (secondError) {
+                    throw new Error(`Character design generation failed for ${charObj.name}: ${secondError.message}`);
                 }
             }
         }
@@ -1566,48 +1575,53 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                 );
                 const charPromises = extractedChars.map(async (char) => {
                     const exists = task.selectedCharacters.find(c => c.name.toLowerCase().includes(char.name.toLowerCase()) || char.name.toLowerCase().includes(c.name.toLowerCase()));
-                    if (!exists) {
-                        const avatar = await apiCharacterDesign(char);
-                        if (avatar) {
-                            char.avatar = avatar;
-                            const age = char.apparent_age_stage || '';
-                            const gender = char.gender || '';
-                            const species = char.species || '';
-                            const otherTraits = [
-                                `角色身份: ${char.role || ''}`,
-                                `外观特征: ${(char.distinct_physical_traits || []).join(', ')}`,
-                                `核心性格: ${(char.core_traits || []).join(', ')}`,
-                                `视觉气质: ${char.visual_energy_profile || ''}`
-                            ].filter(s => s && !s.endsWith(': ')).join(' | ');
-
-                            const fullDesc = [
-                                age ? `年龄: ${age}` : '',
-                                gender ? `性别: ${gender}` : '',
-                                species ? `物种: ${species}` : '',
-                                otherTraits ? `其他特征: ${otherTraits}` : ''
-                            ].filter(Boolean).join(', ');
-
-                            const id = Date.now() + Math.random();
-                            const charData = { id, name: char.name, age, gender, species, otherTraits, desc: fullDesc, avatar, designSheet: avatar, img: avatar };
-                            task.characters.push(charData);
-                            task.selectedCharacters.push(charData);
-                            updateUI(() => {
-                                if (createdCharacterIds.has(charData.id)) {
-                                    return;
-                                }
-                                createdCharacterIds.add(charData.id);
-                                state.characters.push(charData);
-                                state.selectedCharacters.push(charData);
-                                renderCharacterCard(charData, true);
-                                lucide.createIcons();
-                            });
-                            return charData;
-                        }
+                    if (exists) {
+                        return { status: 'skipped', name: char.name };
                     }
-                    return null;
+
+                    const avatar = await apiCharacterDesign(char);
+                    char.avatar = avatar;
+                    const age = char.apparent_age_stage || '';
+                    const gender = char.gender || '';
+                    const species = char.species || '';
+                    const otherTraits = [
+                        `角色身份: ${char.role || ''}`,
+                        `外观特征: ${(char.distinct_physical_traits || []).join(', ')}`,
+                        `核心性格: ${(char.core_traits || []).join(', ')}`,
+                        `视觉气质: ${char.visual_energy_profile || ''}`
+                    ].filter(s => s && !s.endsWith(': ')).join(' | ');
+
+                    const fullDesc = [
+                        age ? `年龄: ${age}` : '',
+                        gender ? `性别: ${gender}` : '',
+                        species ? `物种: ${species}` : '',
+                        otherTraits ? `其他特征: ${otherTraits}` : ''
+                    ].filter(Boolean).join(', ');
+
+                    const id = Date.now() + Math.random();
+                    const charData = { id, name: char.name, age, gender, species, otherTraits, desc: fullDesc, avatar, designSheet: avatar, img: avatar };
+                    task.characters.push(charData);
+                    task.selectedCharacters.push(charData);
+                    updateUI(() => {
+                        if (createdCharacterIds.has(charData.id)) {
+                            return;
+                        }
+                        createdCharacterIds.add(charData.id);
+                        state.characters.push(charData);
+                        state.selectedCharacters.push(charData);
+                        renderCharacterCard(charData, true);
+                        lucide.createIcons();
+                    });
+                    return { status: 'generated', name: char.name, charData };
                 });
 
-                await Promise.allSettled(charPromises);
+                const charResults = await Promise.allSettled(charPromises);
+                const failedCharacters = charResults
+                    .filter(result => result.status === 'rejected')
+                    .map(result => result.reason?.message || 'Unknown character generation error');
+                if (failedCharacters.length > 0) {
+                    throw new Error(failedCharacters.join('；'));
+                }
                 updateUI(() => { lucide.createIcons(); });
 
                 updateUI(() => {
