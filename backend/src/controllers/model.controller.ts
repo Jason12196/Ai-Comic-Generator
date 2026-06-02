@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 
+import { imageRequestCacheService } from "../services/imageRequestCache.service.js";
 import { modelRouterService } from "../services/modelRouter.service.js";
 import { errorResponse, successResponse } from "../utils/response.js";
 
@@ -19,6 +20,7 @@ const generateTextSchema = z.object({
 const generateImageSchema = z.object({
   modelKey: z.string().min(1),
   apiKey: z.string().min(1).optional(),
+  requestKey: z.string().min(1).optional(),
   prompt: z.string().min(1),
   images: z.array(z.string()).optional(),
   promptParts: z.array(z.object({
@@ -56,8 +58,27 @@ export async function generateImageByModel(request: Request, response: Response)
   }
 
   try {
+    if (parsed.data.requestKey) {
+      const { result, cacheStatus } = await imageRequestCacheService.getOrCreate(
+        parsed.data.requestKey,
+        () => modelRouterService.generateImage(parsed.data)
+      );
+
+      return response.json(successResponse({
+        ...result,
+        meta: {
+          requestCacheStatus: cacheStatus
+        }
+      }));
+    }
+
     const result = await modelRouterService.generateImage(parsed.data);
-    return response.json(successResponse(result));
+    return response.json(successResponse({
+      ...result,
+      meta: {
+        requestCacheStatus: "miss"
+      }
+    }));
   } catch (error) {
     return response.status(400).json(errorResponse(error instanceof Error ? error.message : "Image generation failed"));
   }

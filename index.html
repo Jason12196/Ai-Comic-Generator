@@ -13,28 +13,24 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         :root {
-            --bg: #f3f5fb;
-            --bg-strong: #eef2f9;
-            --surface: rgba(255, 255, 255, 0.62);
-            --surface-strong: rgba(255, 255, 255, 0.82);
-            --surface-border: rgba(255, 255, 255, 0.9);
-            --surface-shadow: 0 24px 80px rgba(140, 155, 196, 0.18), 0 6px 18px rgba(103, 114, 148, 0.08);
+            --bg: #f5f7fb;
+            --bg-strong: #eef2f7;
+            --surface: #ffffff;
+            --surface-strong: #ffffff;
+            --surface-border: #e6ebf3;
+            --surface-shadow: 0 8px 24px rgba(24, 32, 51, 0.04);
             --text: #182033;
-            --muted: #7b859e;
-            --muted-soft: #a7aec0;
-            --accent: #7c71ff;
-            --accent-soft: rgba(124, 113, 255, 0.14);
-            --success: #92d7af;
-            --line: rgba(158, 170, 201, 0.16);
+            --muted: #6f7b94;
+            --muted-soft: #9aa5bc;
+            --accent: #5d63ff;
+            --accent-soft: rgba(93, 99, 255, 0.08);
+            --success: #6ab58c;
+            --line: #e8edf5;
         }
 
         body {
             font-family: 'Manrope', sans-serif;
-            background:
-                radial-gradient(circle at 12% 18%, rgba(172, 196, 255, 0.42), transparent 26%),
-                radial-gradient(circle at 84% 16%, rgba(255, 205, 220, 0.36), transparent 24%),
-                radial-gradient(circle at 50% 82%, rgba(216, 228, 255, 0.62), transparent 30%),
-                linear-gradient(180deg, #f8faff 0%, #f1f4fb 48%, #edf1f8 100%);
+            background: linear-gradient(180deg, #f7f9fc 0%, #f3f6fb 100%);
             color: var(--text);
             overflow: hidden;
             position: relative;
@@ -46,11 +42,11 @@
             inset: 0;
             pointer-events: none;
             background-image:
-                linear-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.16) 1px, transparent 1px);
-            background-size: 36px 36px;
-            mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.3), transparent 92%);
-            opacity: 0.16;
+                linear-gradient(rgba(225, 231, 242, 0.5) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(225, 231, 242, 0.5) 1px, transparent 1px);
+            background-size: 48px 48px;
+            mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.18), transparent 92%);
+            opacity: 0.28;
         }
 
         .display-serif {
@@ -59,38 +55,32 @@
         }
 
         .glass-panel {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.48));
+            background: var(--surface);
             border: 1px solid var(--surface-border);
             box-shadow: var(--surface-shadow);
-            backdrop-filter: blur(10px) saturate(1.03);
-            -webkit-backdrop-filter: blur(10px) saturate(1.03);
         }
 
         .glass-panel-soft {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(248, 250, 255, 0.42));
-            border: 1px solid rgba(255, 255, 255, 0.74);
-            box-shadow: 0 16px 46px rgba(123, 138, 174, 0.12);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+            background: #f8faff;
+            border: 1px solid var(--surface-border);
+            box-shadow: none;
         }
 
         .glass-button {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 248, 255, 0.65));
-            border: 1px solid rgba(255, 255, 255, 0.95);
-            box-shadow: 0 10px 28px rgba(109, 121, 158, 0.13);
-            backdrop-filter: blur(4px);
+            background: #ffffff;
+            border: 1px solid var(--surface-border);
+            box-shadow: none;
         }
 
         .liquid-button {
-            background: linear-gradient(135deg, #8278ff 0%, #6f82ff 52%, #8db4ff 100%);
-            box-shadow: 0 20px 38px rgba(111, 130, 255, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+            background: var(--accent);
+            box-shadow: 0 10px 24px rgba(93, 99, 255, 0.18);
         }
 
         .task-card-glass {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(245, 247, 252, 0.72));
-            border: 1px solid rgba(255, 255, 255, 0.88);
-            box-shadow: 0 18px 34px rgba(105, 116, 150, 0.08);
-            backdrop-filter: blur(4px);
+            background: #ffffff;
+            border: 1px solid var(--surface-border);
+            box-shadow: none;
         }
 
         .char-dash-box {
@@ -102,7 +92,7 @@
         .char-card-selected { border: 2px solid rgba(124, 113, 255, 0.92) !important; background-color: rgba(244, 242, 255, 0.98) !important; box-shadow: 0 10px 22px rgba(124, 113, 255, 0.18); }
         .char-card-selected .check-badge { display: flex !important; }
 
-        .modal-overlay { background: rgba(17, 24, 39, 0.18); backdrop-filter: blur(6px); }
+        .modal-overlay { background: rgba(17, 24, 39, 0.26); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         
         .agent-processing { animation: pulse 1.6s infinite; color: #6f68ff; font-weight: 700; }
@@ -141,16 +131,10 @@
             animation: statusSweep 2.2s linear infinite;
         }
 
-        .welcome-orbit {
-            animation: floatSoft 18s ease-in-out infinite;
-            will-change: transform;
-        }
-
         .hero-chip {
-            background: rgba(255, 255, 255, 0.54);
-            border: 1px solid rgba(255, 255, 255, 0.88);
-            box-shadow: 0 10px 22px rgba(134, 145, 180, 0.12);
-            backdrop-filter: blur(8px);
+            background: #f6f8fc;
+            border: 1px solid var(--surface-border);
+            box-shadow: none;
         }
 
         body.landing-mode #floatingInputBox {
@@ -187,7 +171,6 @@
         }
 
         @media (prefers-reduced-motion: reduce) {
-            .welcome-orbit,
             .status-marquee::after,
             .progress-liquid::after,
             .agent-processing,
@@ -209,15 +192,15 @@
 
     <!-- 任务列表侧边栏 -->
     <aside class="w-[320px] shrink-0 z-40 relative p-5">
-        <div class="glass-panel h-full rounded-[34px] overflow-hidden flex flex-col">
+        <div class="glass-panel h-full rounded-[28px] overflow-hidden flex flex-col">
             <div class="px-7 py-7 border-b border-white/60">
                 <div class="flex items-center gap-3 mb-6">
-                    <div class="w-11 h-11 rounded-2xl liquid-button flex items-center justify-center text-white text-xl font-bold shadow-[0_12px_30px_rgba(124,113,255,0.34)]">W</div>
+                    <div class="w-11 h-11 rounded-2xl liquid-button flex items-center justify-center text-white text-xl font-bold">W</div>
                     <div>
                         <p class="text-sm text-[#66708c] font-semibold">任务工作台</p>
                     </div>
                 </div>
-                <button onclick="createNewTask()" class="w-full liquid-button text-white py-4 rounded-[24px] font-bold transition-all flex items-center justify-center gap-2 shadow-[0_18px_40px_rgba(124,113,255,0.24)] hover:scale-[1.01] active:scale-[0.99]">
+                <button onclick="createNewTask()" class="w-full liquid-button text-white py-4 rounded-[20px] font-bold transition-all flex items-center justify-center gap-2 hover:opacity-95 active:opacity-90">
                     <i data-lucide="plus" class="w-4 h-4"></i> New Task
                 </button>
             </div>
@@ -241,8 +224,8 @@
     </aside>
 
     <main class="flex-1 flex flex-col relative overflow-hidden p-5 pl-0">
-        <div class="glass-panel h-full rounded-[34px] overflow-hidden flex flex-col relative">
-        <header class="h-20 shrink-0 flex items-center justify-between px-10 gap-4 border-b border-white/60 bg-white/28 sticky top-0 z-30 backdrop-blur-xl">
+        <div class="glass-panel h-full rounded-[28px] overflow-hidden flex flex-col relative">
+        <header class="h-20 shrink-0 flex items-center justify-between px-10 gap-4 border-b border-[#e8edf5] bg-white sticky top-0 z-30">
             <div>
                 <p class="text-[11px] uppercase tracking-[0.26em] text-[#97a1bd] font-extrabold mb-1">Workspace</p>
                 <h1 class="text-[28px] font-bold text-[#1a2338] display-serif">Storyboard Atelier</h1>
@@ -282,14 +265,9 @@
         <div class="flex-1 flex overflow-hidden">
             <!-- Center Canvas Area -->
             <div class="flex-1 overflow-y-auto relative flex flex-col items-center">
-                <div class="pointer-events-none absolute inset-0 overflow-hidden">
-                    <div class="welcome-orbit absolute top-[11%] left-[14%] w-48 h-48 rounded-full bg-[radial-gradient(circle,_rgba(255,255,255,0.9)_0%,_rgba(255,255,255,0.12)_62%,_transparent_72%)] blur-[2px] opacity-80"></div>
-                    <div class="welcome-orbit absolute top-[24%] right-[12%] w-72 h-72 rounded-full bg-[radial-gradient(circle,_rgba(190,211,255,0.52)_0%,_rgba(190,211,255,0.08)_58%,_transparent_72%)] opacity-70" style="animation-delay:-2.5s;"></div>
-                    <div class="welcome-orbit absolute bottom-[12%] left-[26%] w-60 h-60 rounded-full bg-[radial-gradient(circle,_rgba(255,230,237,0.56)_0%,_rgba(255,230,237,0.08)_58%,_transparent_76%)] opacity-70" style="animation-delay:-4.2s;"></div>
-                </div>
                 <!-- Welcome State -->
-                <div id="welcomeState" class="w-full max-w-4xl px-8 pt-14 pb-10 text-center relative z-10">
-                    <h2 class="display-serif text-[54px] leading-[0.98] text-[#1b2540] mb-4">从一段故事<br>生成一部漫画</h2>
+                <div id="welcomeState" class="w-full max-w-4xl px-8 pt-16 pb-8 text-center relative z-10">
+                    <h2 class="display-serif text-[52px] leading-[0.98] text-[#1b2540] mb-4">从一段故事<br>生成一部漫画</h2>
                     <div class="mt-4 flex items-center justify-center gap-3 flex-wrap">
                         <button onclick="clearHistory()" class="glass-button text-xs font-bold text-[#7a849d] hover:text-[#d45f76] transition-colors flex items-center gap-2 px-4 py-3 rounded-full">
                             <i data-lucide="trash-2" class="w-4 h-4"></i> 清除历史记录
@@ -305,7 +283,7 @@
 
                 <!-- Expanded Story (Hidden by default) -->
                 <div id="expandedStoryBox" class="hidden w-full max-w-4xl px-8 mt-8 mb-4 relative z-10">
-                    <div class="glass-panel-soft p-6 rounded-[28px] animate-in fade-in">
+                    <div class="glass-panel-soft p-6 rounded-[20px] animate-in fade-in">
                         <div class="flex items-center gap-2 mb-4 text-[#7369ff]">
                             <i data-lucide="wand-2" class="w-4 h-4"></i>
                             <span class="text-[11px] font-bold uppercase">AI 结构化故事大纲</span>
@@ -319,7 +297,7 @@
                     <div class="flex justify-between items-center w-full mb-8">
                         <h3 class="text-[40px] display-serif text-[#1c2440]">最终成片</h3>
                         <div id="comicGenProgress" class="flex items-center gap-4 hidden">
-                            <div class="w-72 h-3 bg-white/55 rounded-full overflow-hidden border border-white/75 shadow-[inset_0_1px_2px_rgba(255,255,255,0.8)]">
+                            <div class="w-72 h-3 bg-[#eef2f8] rounded-full overflow-hidden border border-[#e4e9f1]">
                                 <div id="progressBar" class="progress-liquid h-full bg-[linear-gradient(90deg,#7d71ff_0%,#8aa4ff_100%)] w-0 transition-all duration-300 rounded-full"></div>
                             </div>
                             <span id="progressText" class="status-marquee text-xs font-bold text-[#6f68ff] uppercase w-40">生成中 0/4...</span>
@@ -346,27 +324,27 @@
             </div>
 
             <!-- Floating Input Box -->
-            <div id="floatingInputBox" class="glass-panel absolute bottom-8 left-1/2 transform -translate-x-1/2 w-full max-w-4xl z-50 rounded-[36px] flex flex-col transition-all duration-300 overflow-hidden">
+            <div id="floatingInputBox" class="glass-panel absolute bottom-8 left-1/2 transform -translate-x-1/2 w-full max-w-4xl z-50 rounded-[24px] flex flex-col transition-all duration-300 overflow-hidden">
                 <!-- 顶部：文本输入区 -->
                 <div class="relative p-7 pb-3">
                     <textarea id="storyInput" class="w-full h-12 bg-transparent border-none p-0 text-[15px] text-[#212b44] placeholder-[#9ba5bd] focus:outline-none focus:ring-0 resize-none transition-all duration-300 scrollbar-hide leading-8" placeholder="输入一句故事、一个场景，或一段想法..."></textarea>
-                    <button type="button" onclick="toggleInputHeight()" class="absolute top-6 right-6 text-[#98a3bd] hover:text-[#6f68ff] transition-colors bg-white/60 rounded-full p-2 shadow-[0_10px_20px_rgba(131,142,174,0.12)]">
+                    <button type="button" onclick="toggleInputHeight()" class="absolute top-6 right-6 text-[#98a3bd] hover:text-[#6f68ff] transition-colors bg-[#f6f8fc] rounded-full p-2">
                         <i data-lucide="maximize-2" id="expandIcon" class="w-4 h-4"></i>
                     </button>
                 </div>
 
                 <!-- 中部：角色列表 -->
                 <div class="px-7 py-3 flex gap-3 flex-wrap items-center min-h-[60px]" id="attachedCharacters">
-                    <button type="button" id="addCharBtn" onclick="openModal()" class="w-12 h-12 rounded-full bg-white/72 hover:bg-white flex items-center justify-center text-[#9aa4bc] hover:text-[#6f68ff] transition-colors shrink-0 shadow-[0_12px_24px_rgba(136,145,177,0.12)] border border-white/80">
+                    <button type="button" id="addCharBtn" onclick="openModal()" class="w-12 h-12 rounded-full bg-[#f6f8fc] hover:bg-[#eef2f8] flex items-center justify-center text-[#9aa4bc] hover:text-[#6f68ff] transition-colors shrink-0 border border-[#e6ebf3]">
                         <i data-lucide="plus" class="w-5 h-5"></i>
                     </button>
                 </div>
 
                 <!-- 底部：操作选项栏 -->
-                <div class="px-7 py-5 flex items-center justify-between border-t border-white/60 bg-white/18">
+                <div class="px-7 py-5 flex items-center justify-between border-t border-[#e8edf5] bg-white">
                     <div class="flex items-center gap-3">
                         <!-- 设置图标 -->
-                        <button type="button" class="text-[#95a1bb] hover:text-[#5d6785] transition-colors p-2 hover:bg-white/60 rounded-2xl relative" onclick="toggleDropdown('settingsDropdown')">
+                        <button type="button" class="text-[#95a1bb] hover:text-[#5d6785] transition-colors p-2 hover:bg-[#f6f8fc] rounded-2xl relative" onclick="toggleDropdown('settingsDropdown')">
                             <i data-lucide="settings-2" class="w-4 h-4"></i>
                         </button>
                         
@@ -449,7 +427,7 @@
                         </div>
 
                         <!-- AI 扩写开关 -->
-                        <label class="flex items-center gap-2 cursor-pointer ml-2 px-3 py-2 rounded-full bg-white/42 border border-white/70">
+                        <label class="flex items-center gap-2 cursor-pointer ml-2 px-3 py-2 rounded-full bg-[#f7f9fc] border border-[#e6ebf3]">
                             <div class="relative">
                                 <input type="checkbox" id="enableExpansion" checked class="sr-only" onchange="toggleExpansionVisual(this)">
                                 <div class="block bg-purple-600 w-8 h-5 rounded-full transition-colors duration-300" id="expansionToggleBg"></div>
@@ -576,29 +554,41 @@
     </div>
 
 
-    <div id="charModal" class="fixed inset-0 modal-overlay z-50 flex items-center justify-center hidden">
-        <div class="bg-white w-[800px] rounded-[32px] shadow-2xl overflow-hidden flex flex-col">
-            <div class="p-6 border-b border-gray-50 flex justify-between items-center">
+    <div id="charModal" class="fixed inset-0 modal-overlay z-50 flex items-center justify-center hidden p-5">
+        <div class="glass-panel w-full h-full max-w-[1380px] rounded-[28px] overflow-hidden flex flex-col">
+            <div class="p-6 border-b border-[#e8edf5] flex justify-between items-center">
                 <div class="flex items-center gap-4">
-                    <h3 class="text-lg font-bold">设定角色</h3>
+                    <div>
+                        <p class="text-[11px] uppercase tracking-[0.24em] text-[#98a1b8] font-extrabold mb-1">Character Studio</p>
+                        <h3 class="text-2xl font-bold text-[#1d2438]">设定角色</h3>
+                    </div>
                     <div id="charModalNav" class="hidden flex items-center gap-2">
-                        <button onclick="prevCharacter()" class="w-8 h-8 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-600 transition-colors"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                        <button onclick="prevCharacter()" class="w-8 h-8 rounded-full bg-[#f6f8fc] hover:bg-[#eef2f8] flex items-center justify-center text-gray-600 transition-colors"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
                         <span id="charModalCounter" class="text-xs font-bold text-gray-400">1 / 3</span>
-                        <button onclick="nextCharacter()" class="w-8 h-8 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-600 transition-colors"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+                        <button onclick="nextCharacter()" class="w-8 h-8 rounded-full bg-[#f6f8fc] hover:bg-[#eef2f8] flex items-center justify-center text-gray-600 transition-colors"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
                     </div>
                 </div>
                 <button type="button" onclick="closeModal()" class="text-gray-400"><i data-lucide="x"></i></button>
             </div>
-            <div class="flex h-[450px]">
-                <div class="w-1/2 p-8 space-y-3 overflow-y-auto no-scrollbar">
-                    <input id="charName" type="text" class="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="名称">
-                    <div class="flex gap-2">
-                        <input id="charAge" type="text" class="w-1/3 bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="年龄">
-                        <input id="charGender" type="text" class="w-1/3 bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="性别">
-                        <input id="charSpecies" type="text" class="w-1/3 bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="物种">
+            <div class="flex-1 flex overflow-hidden">
+                <div class="w-[46%] p-8 space-y-4 overflow-y-auto no-scrollbar border-r border-[#e8edf5]">
+                    <div class="grid grid-cols-1 gap-4">
+                        <input id="charName" type="text" class="w-full bg-white border border-[#e6ebf3] rounded-2xl px-5 py-4 text-sm font-semibold outline-none" placeholder="名称">
                     </div>
-                    <textarea id="charOtherTraits" class="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-sm h-24 outline-none resize-none" placeholder="其他特征/外貌描述..."></textarea>
-                    <div class="relative h-24 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center text-gray-400 text-xs hover:bg-gray-50 transition-colors group">
+                    <div class="flex gap-2">
+                        <input id="charAge" type="text" class="w-1/3 bg-white border border-[#e6ebf3] rounded-2xl px-4 py-3 text-sm outline-none" placeholder="年龄">
+                        <input id="charGender" type="text" class="w-1/3 bg-white border border-[#e6ebf3] rounded-2xl px-4 py-3 text-sm outline-none" placeholder="性别">
+                        <input id="charSpecies" type="text" class="w-1/3 bg-white border border-[#e6ebf3] rounded-2xl px-4 py-3 text-sm outline-none" placeholder="物种">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <input id="charRole" type="text" class="w-full bg-white border border-[#e6ebf3] rounded-2xl px-4 py-3 text-sm outline-none" placeholder="角色身份 / 职业">
+                        <input id="charPersonality" type="text" class="w-full bg-white border border-[#e6ebf3] rounded-2xl px-4 py-3 text-sm outline-none" placeholder="核心性格">
+                    </div>
+                    <textarea id="charAppearance" class="w-full bg-white border border-[#e6ebf3] rounded-2xl px-4 py-3 text-sm h-24 outline-none resize-none" placeholder="外貌特征：发型、五官、体型、肤色、气质..."></textarea>
+                    <textarea id="charOutfit" class="w-full bg-white border border-[#e6ebf3] rounded-2xl px-4 py-3 text-sm h-20 outline-none resize-none" placeholder="服装 / 材质 / 配色 / 饰品..."></textarea>
+                    <textarea id="charBackground" class="w-full bg-white border border-[#e6ebf3] rounded-2xl px-4 py-3 text-sm h-20 outline-none resize-none" placeholder="背景设定 / 关系 / 习惯 / 世界观补充..."></textarea>
+                    <textarea id="charOtherTraits" class="w-full bg-white border border-[#e6ebf3] rounded-2xl px-4 py-3 text-sm h-24 outline-none resize-none" placeholder="额外生成要求：镜头、姿态、表情、禁忌项..."></textarea>
+                    <div class="relative h-28 border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center text-gray-400 text-xs hover:bg-gray-50 transition-colors group">
                         <div class="absolute inset-0 flex flex-col items-center justify-center cursor-pointer" onclick="document.getElementById('charImage').click()">
                             <i data-lucide="upload" class="w-6 h-6 mb-2 text-gray-400" id="uploadIcon"></i>
                             <span id="charImageText">上传参考图 (可选)</span>
@@ -610,12 +600,19 @@
                         </button>
                     </div>
                 </div>
-                <div class="w-1/2 p-8 bg-gray-50/50 flex flex-col">
-                    <div id="previewBox" class="flex-1 bg-white rounded-2xl border border-gray-100 mb-4 flex items-center justify-center overflow-hidden">
+                <div class="w-[54%] p-8 bg-[#f8faff] flex flex-col">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <p class="text-[11px] uppercase tracking-[0.2em] text-[#98a1b8] font-extrabold mb-1">Preview</p>
+                            <p class="text-sm font-semibold text-[#5f6985]">角色设定图 / 设计图预览</p>
+                        </div>
+                        <div id="charGenerationStatus" class="text-xs font-bold text-[#7d88a6]"></div>
+                    </div>
+                    <div id="previewBox" class="flex-1 bg-white rounded-[24px] border border-[#e6ebf3] mb-4 flex items-center justify-center overflow-hidden">
                         <i data-lucide="image" class="text-gray-200 w-12 h-12"></i>
                         <img id="tempResultImg" class="hidden w-full h-full object-cover">
                     </div>
-                    <button type="button" id="modalGenBtn" onclick="generateAvatarPreview()" class="w-full bg-purple-600 text-white py-3 rounded-xl text-xs font-bold">生成角色设定图</button>
+                    <button type="button" id="modalGenBtn" onclick="generateAvatarPreview()" class="w-full liquid-button text-white py-4 rounded-2xl text-sm font-bold">生成角色设定图</button>
                     <div id="manualUploadSection" class="mt-4">
                         <div class="flex items-center justify-between text-xs text-gray-400 mb-3">
                             <span class="h-px bg-gray-200 flex-1"></span>
@@ -623,14 +620,14 @@
                             <span class="h-px bg-gray-200 flex-1"></span>
                         </div>
                         <div class="flex gap-2">
-                            <button type="button" onclick="document.getElementById('manualDesignUpload').click()" class="w-full bg-white border border-gray-200 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50">上传设计图</button>
+                            <button type="button" onclick="document.getElementById('manualDesignUpload').click()" class="w-full glass-button py-3 rounded-2xl text-xs font-bold text-gray-600 hover:bg-[#f6f8fc]">上传设计图</button>
                         </div>
                         <input type="file" id="manualDesignUpload" accept="image/*" class="hidden" onchange="handleManualDesign(event)">
                     </div>
-                    <div id="modalConfirmActions" class="hidden flex gap-2 mt-4">
-                        <button type="button" id="modalDeleteBtn" onclick="deleteCharacter()" class="hidden flex-1 bg-red-50 text-red-600 border border-red-100 py-3 rounded-xl text-xs font-bold hover:bg-red-100">删除角色</button>
-                        <button type="button" id="modalRegenBtn" onclick="generateAvatarPreview()" class="flex-1 bg-white border border-gray-200 py-3 rounded-xl text-xs font-bold">重新生成</button>
-                        <button type="button" onclick="saveCharacterToGrid()" class="flex-1 bg-black text-white py-3 rounded-xl text-xs font-bold">保存角色</button>
+                    <div id="modalConfirmActions" class="hidden flex gap-3 mt-4">
+                        <button type="button" id="modalDeleteBtn" onclick="deleteCharacter()" class="hidden flex-1 bg-red-50 text-red-600 border border-red-100 py-3 rounded-2xl text-xs font-bold hover:bg-red-100">删除角色</button>
+                        <button type="button" id="modalRegenBtn" onclick="generateAvatarPreview()" class="flex-1 glass-button py-3 rounded-2xl text-xs font-bold">重新生成当前角色</button>
+                        <button type="button" onclick="saveCharacterToGrid()" class="flex-1 bg-black text-white py-3 rounded-2xl text-xs font-bold">保存并返回</button>
                     </div>
                 </div>
             </div>
@@ -638,7 +635,7 @@
     </div>
 
     <div id="authModal" class="hidden fixed inset-0 z-[90] modal-overlay items-center justify-center p-6">
-        <div class="glass-panel w-full max-w-[420px] rounded-[30px] p-7 shadow-[0_24px_70px_rgba(86,98,139,0.22)]">
+        <div class="glass-panel w-full max-w-[420px] rounded-[24px] p-7">
             <div class="flex items-start justify-between gap-4 mb-5">
                 <div>
                     <p class="text-[11px] uppercase tracking-[0.24em] text-[#98a1b8] font-extrabold mb-2">Cloud Account</p>
@@ -697,6 +694,7 @@
         let defaultImageModelKey = 'google.gemini-3-pro-image-preview';
         let authMode = 'login';
         let taskSyncTimer = null;
+        let characterStatusTicker = null;
 
         function renderModelSelectOptions(selectId, models, savedValue) {
             const select = document.getElementById(selectId);
@@ -1312,7 +1310,7 @@
 
             if (savedCases.length === 0) {
                 casesContainer.innerHTML = `
-                    <div class="cheap-glass rounded-[24px] px-5 py-5 text-center">
+                    <div class="cheap-glass rounded-[20px] px-5 py-5 text-center">
                         <div class="w-10 h-10 rounded-[16px] mx-auto mb-3 bg-white/88 border border-white/90 shadow-[0_8px_18px_rgba(130,142,177,0.08)] flex items-center justify-center text-[#9aa3bd]">
                             <i data-lucide="archive" class="w-4 h-4"></i>
                         </div>
@@ -1327,7 +1325,7 @@
             savedCases.forEach(c => {
                 const caseDataStr = encodeURIComponent(JSON.stringify(c.state));
                 html += `
-                    <div onclick="loadCase('${caseDataStr}')" class="task-card-glass p-4 rounded-[24px] hover:ring-1 hover:ring-white/80 transition-all cursor-pointer group">
+                    <div onclick="loadCase('${caseDataStr}')" class="task-card-glass p-4 rounded-[20px] hover:border-[#dbe2ef] transition-colors cursor-pointer group">
                         <div class="flex items-center gap-3">
                             <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${c.seed}" class="w-11 h-11 rounded-[18px] border border-white/90 bg-white/70 object-cover shadow-[0_8px_18px_rgba(130,142,177,0.08)]">
                             <div class="flex-1 min-w-0">
@@ -1683,6 +1681,107 @@
             return error instanceof Error && /timed out|timeout/i.test(error.message);
         }
 
+        function createStableHash(input) {
+            let hash = 0;
+            const normalized = String(input || '');
+            for (let index = 0; index < normalized.length; index += 1) {
+                hash = ((hash << 5) - hash) + normalized.charCodeAt(index);
+                hash |= 0;
+            }
+            return `h${Math.abs(hash)}`;
+        }
+
+        function getCharacterFormValues() {
+            return {
+                name: (document.getElementById('charName').value || 'Unnamed').trim(),
+                age: (document.getElementById('charAge').value || '').trim(),
+                gender: (document.getElementById('charGender').value || '').trim(),
+                species: (document.getElementById('charSpecies').value || '').trim(),
+                role: (document.getElementById('charRole').value || '').trim(),
+                personality: (document.getElementById('charPersonality').value || '').trim(),
+                appearance: (document.getElementById('charAppearance').value || '').trim(),
+                outfit: (document.getElementById('charOutfit').value || '').trim(),
+                background: (document.getElementById('charBackground').value || '').trim(),
+                otherTraits: (document.getElementById('charOtherTraits').value || '').trim()
+            };
+        }
+
+        function buildCharacterDescription(formValues) {
+            return [
+                formValues.age ? `年龄: ${formValues.age}` : '',
+                formValues.gender ? `性别: ${formValues.gender}` : '',
+                formValues.species ? `物种: ${formValues.species}` : '',
+                formValues.role ? `身份: ${formValues.role}` : '',
+                formValues.personality ? `性格: ${formValues.personality}` : '',
+                formValues.appearance ? `外貌: ${formValues.appearance}` : '',
+                formValues.outfit ? `服装: ${formValues.outfit}` : '',
+                formValues.background ? `背景: ${formValues.background}` : '',
+                formValues.otherTraits ? `额外要求: ${formValues.otherTraits}` : ''
+            ].filter(Boolean).join(', ');
+        }
+
+        function buildCharacterRequestKey(formValues, uploadedImageBase64 = null, modelKey = null) {
+            return [
+                'character-design',
+                modelKey || getRuntimeModelSelection().imageModelKey,
+                formValues.name,
+                formValues.age,
+                formValues.gender,
+                formValues.species,
+                formValues.role,
+                formValues.personality,
+                formValues.appearance,
+                formValues.outfit,
+                formValues.background,
+                formValues.otherTraits,
+                uploadedImageBase64 ? createStableHash(uploadedImageBase64) : 'no-ref'
+            ].join('|');
+        }
+
+        function setCharacterGenerationState(message, options = {}) {
+            const status = document.getElementById('charGenerationStatus');
+            if (!status) return;
+
+            const {
+                tone = 'neutral',
+                persist = true
+            } = options;
+
+            if (characterStatusTicker) {
+                clearInterval(characterStatusTicker);
+                characterStatusTicker = null;
+            }
+
+            status.className = `text-xs font-bold ${
+                tone === 'error' ? 'text-[#d45f76]' :
+                tone === 'success' ? 'text-[#57b07d]' :
+                tone === 'active' ? 'text-[#6f68ff]' :
+                'text-[#7d88a6]'
+            }`;
+            status.innerText = message || '';
+
+            if (!persist && message) {
+                setTimeout(() => {
+                    if (status.innerText === message) {
+                        status.innerText = '';
+                    }
+                }, 2500);
+            }
+        }
+
+        function startCharacterGenerationTicker(messages) {
+            if (!Array.isArray(messages) || messages.length === 0) return;
+            let index = 0;
+            setCharacterGenerationState(messages[0], { tone: 'active' });
+            if (characterStatusTicker) {
+                clearInterval(characterStatusTicker);
+            }
+            characterStatusTicker = setInterval(() => {
+                index = (index + 1) % messages.length;
+                setCharacterGenerationState(messages[index], { tone: 'active' });
+            }, 1800);
+        }
+
         function withTimeout(promise, timeoutMs, timeoutMessage) {
             return new Promise((resolve, reject) => {
                 const timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
@@ -1736,7 +1835,7 @@
             throw lastError || new Error(`Comic render page ${pageNumber} failed`);
         }
 
-        function buildImageRequestPayload({ prompt, promptParts, aspectRatio, modelKeyOverride, apiKeyOverride }) {
+        function buildImageRequestPayload({ prompt, promptParts, aspectRatio, modelKeyOverride, apiKeyOverride, requestKey }) {
             const selection = getRuntimeModelSelection();
             const modelKey = resolveWorkflowImageModelKey(modelKeyOverride);
             const modelConfig = getModelConfigByKey(modelKey, 'image');
@@ -1770,6 +1869,7 @@
             return {
                 modelKey,
                 apiKey: apiKeyOverride || selection.imageApiKey,
+                requestKey,
                 prompt: finalPrompt,
                 promptParts: finalPromptParts,
                 images,
@@ -1806,17 +1906,17 @@
             return text;
         }
 
-        async function callWorkflowImageModel({ prompt, promptParts, aspectRatio, modelKeyOverride, apiKeyOverride }) {
+        async function callWorkflowImageModel({ prompt, promptParts, aspectRatio, modelKeyOverride, apiKeyOverride, requestKey }) {
             const keyError = validateModelKeysForCurrentSelection();
             if (keyError) {
                 throw new Error(keyError);
             }
 
-            const payload = buildImageRequestPayload({ prompt, promptParts, aspectRatio, modelKeyOverride, apiKeyOverride });
-            const response = await apiRequest('/models/generate-image', {
-                method: "POST",
-                body: JSON.stringify(payload)
-            });
+            const payload = buildImageRequestPayload({ prompt, promptParts, aspectRatio, modelKeyOverride, apiKeyOverride, requestKey });
+                const response = await apiRequest('/models/generate-image', {
+                    method: "POST",
+                    body: JSON.stringify(payload)
+                });
 
             return response.data;
         }
@@ -1912,7 +2012,8 @@ Professional character turnaround sheet, clean light gray studio background, fro
             description,
             uploadedBase64 = null,
             uploadedMimeType = null,
-            preferredGoogleModel = null
+            preferredGoogleModel = null,
+            requestKey = null
         }) {
             const selection = getRuntimeModelSelection();
             const selectedImageModel = getModelByKeyFromCache(selection.imageModelKey);
@@ -1939,14 +2040,18 @@ Professional character turnaround sheet, clean light gray studio background, fro
                     promptParts: designPromptParts,
                     aspectRatio: "1:1",
                     modelKeyOverride: currentModel,
-                    apiKeyOverride: selection.imageApiKey
+                    apiKeyOverride: selection.imageApiKey,
+                    requestKey: requestKey ? `${requestKey}|${useProModel ? 'fallback' : 'primary'}` : undefined
                 });
 
                 const imageData = result.images?.[0];
                 if (!imageData) {
                     throw new Error("Failed to generate design sheet image");
                 }
-                return imageData;
+                return {
+                    imageData,
+                    meta: result.meta || {}
+                };
             };
 
             try {
@@ -1969,6 +2074,18 @@ Professional character turnaround sheet, clean light gray studio background, fro
             const selection = getRuntimeModelSelection();
             const selectedImageModel = getModelByKeyFromCache(selection.imageModelKey);
             const usesGoogleImageModel = selectedImageModel?.provider === 'google';
+            const requestKey = buildCharacterRequestKey({
+                name: charObj.name,
+                age: charObj.apparent_age_stage || '',
+                gender: charObj.gender || '',
+                species: charObj.species || '',
+                role: charObj.role || '',
+                personality: (charObj.core_traits || []).join(', '),
+                appearance: (charObj.distinct_physical_traits || []).join(', '),
+                outfit: '',
+                background: '',
+                otherTraits: charObj.visual_energy_profile || ''
+            }, null, selection.imageModelKey);
 
             const tryGenerate = async (useProModel = false) => {
                 const overrideModelKey = useProModel && usesGoogleImageModel
@@ -1986,7 +2103,8 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                     prompt,
                     aspectRatio: "1:1",
                     modelKeyOverride: overrideModelKey,
-                    apiKeyOverride: selection.imageApiKey
+                    apiKeyOverride: selection.imageApiKey,
+                    requestKey: `${requestKey}|${useProModel ? 'fallback' : 'primary'}`
                 });
                 const image = result.images?.[0];
                 if (!image) {
@@ -2665,7 +2783,13 @@ Layout Logic: ${page.layout_logic}`;
             document.getElementById('charAge').value = '';
             document.getElementById('charGender').value = '';
             document.getElementById('charSpecies').value = '';
+            document.getElementById('charRole').value = '';
+            document.getElementById('charPersonality').value = '';
+            document.getElementById('charAppearance').value = '';
+            document.getElementById('charOutfit').value = '';
+            document.getElementById('charBackground').value = '';
             document.getElementById('charOtherTraits').value = '';
+            document.getElementById('charGenerationStatus').innerText = '';
             
             const deleteBtn = document.getElementById('modalDeleteBtn');
             if (deleteBtn) deleteBtn.classList.add('hidden');
@@ -2733,7 +2857,13 @@ Layout Logic: ${page.layout_logic}`;
             document.getElementById('charAge').value = char.age || '';
             document.getElementById('charGender').value = char.gender || '';
             document.getElementById('charSpecies').value = char.species || '';
+            document.getElementById('charRole').value = char.role || '';
+            document.getElementById('charPersonality').value = char.personality || '';
+            document.getElementById('charAppearance').value = char.appearance || '';
+            document.getElementById('charOutfit').value = char.outfit || '';
+            document.getElementById('charBackground').value = char.background || '';
             document.getElementById('charOtherTraits').value = char.otherTraits || char.desc || '';
+            document.getElementById('charGenerationStatus').innerText = '';
             
             const preview = document.getElementById('tempResultImg');
             preview.src = char.designSheet || char.avatar;
@@ -2791,6 +2921,7 @@ Layout Logic: ${page.layout_logic}`;
             const btn = document.getElementById('modalGenBtn');
             const regenBtn = document.getElementById('modalRegenBtn');
             const preview = document.getElementById('tempResultImg');
+            const status = document.getElementById('charGenerationStatus');
             
             btn.innerText = "处理中...";
             btn.disabled = true;
@@ -2798,39 +2929,64 @@ Layout Logic: ${page.layout_logic}`;
                 regenBtn.innerText = "处理中...";
                 regenBtn.disabled = true;
             }
+            status.innerText = '正在生成角色设定图...';
             
             document.getElementById('manualUploadSection').classList.add('hidden');
             
-            const name = document.getElementById('charName').value || 'Unnamed';
-            const age = document.getElementById('charAge').value || '';
-            const gender = document.getElementById('charGender').value || '';
-            const species = document.getElementById('charSpecies').value || '';
-            const otherTraits = document.getElementById('charOtherTraits').value || '';
-            
-            const descParts = [
-                age ? `年龄: ${age}` : '',
-                gender ? `性别: ${gender}` : '',
-                species ? `物种: ${species}` : '',
-                otherTraits ? `其他特征: ${otherTraits}` : ''
-            ].filter(Boolean);
-            
-            const desc = descParts.length > 0 ? descParts.join(', ') : 'A basic character';
+            const formValues = getCharacterFormValues();
+            const name = formValues.name || 'Unnamed';
+            const desc = buildCharacterDescription(formValues) || 'A basic character';
+            const requestKey = buildCharacterRequestKey(
+                formValues,
+                window.uploadedImageBase64 || null,
+                getRuntimeModelSelection().imageModelKey
+            );
             
             try {
-                const imageData = await requestCharacterDesignImage({
+                startCharacterGenerationTicker([
+                    '正在提交角色设定请求...',
+                    '模型正在生成角色设定图...',
+                    '正在等待图片结果返回...',
+                    '正在校验角色图片结果...'
+                ]);
+
+                const generation = await requestCharacterDesignImage({
                     name,
                     description: desc,
                     uploadedBase64: window.uploadedImageBase64 || null,
                     uploadedMimeType: window.uploadedImageMimeType || null,
-                    preferredGoogleModel: MODELS.IMAGE_FAST
+                    preferredGoogleModel: MODELS.IMAGE_FAST,
+                    requestKey
                 });
+                const imageData = generation.imageData;
                 preview.src = imageData;
                 window.lastGeneratedAvatar = imageData;
                 window.lastGeneratedDesignSheet = imageData;
+                const cacheStatus = generation.meta?.requestCacheStatus;
+                if (cacheStatus === 'hit') {
+                    setCharacterGenerationState('角色设定图已返回（命中缓存）', { tone: 'success' });
+                } else if (cacheStatus === 'shared') {
+                    setCharacterGenerationState('角色设定图已返回（复用进行中的请求）', { tone: 'success' });
+                } else {
+                    setCharacterGenerationState('角色设定图已生成', { tone: 'success' });
+                }
             } catch (err) {
                 console.error("API Error:", err);
-                preview.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`;
-                alert("生成失败，API 报错请查看控制台: " + err.message);
+                const errorMessage = err?.message || '未知错误';
+                setCharacterGenerationState(`生成失败：${errorMessage}`, { tone: 'error' });
+                alert("生成失败，API 报错请查看控制台: " + errorMessage);
+                preview.classList.add('hidden');
+                preview.removeAttribute('src');
+                btn.classList.remove('hidden');
+                document.getElementById('manualUploadSection').classList.remove('hidden');
+                document.getElementById('modalConfirmActions').classList.add('hidden');
+                btn.innerText = "生成角色设定图";
+                btn.disabled = false;
+                if (regenBtn) {
+                    regenBtn.innerText = "重新生成当前角色";
+                    regenBtn.disabled = false;
+                }
+                return;
             }
             
             preview.classList.remove('hidden');
@@ -2840,24 +2996,15 @@ Layout Logic: ${page.layout_logic}`;
             btn.innerText = "生成角色设定图";
             btn.disabled = false;
             if (regenBtn) {
-                regenBtn.innerText = "重新生成";
+                regenBtn.innerText = "重新生成当前角色";
                 regenBtn.disabled = false;
             }
         }
 
         function saveCharacterToGrid(keepOpen = false) {
-            const name = document.getElementById('charName').value || "Unnamed";
-            const age = document.getElementById('charAge').value || '';
-            const gender = document.getElementById('charGender').value || '';
-            const species = document.getElementById('charSpecies').value || '';
-            const otherTraits = document.getElementById('charOtherTraits').value || '';
-            
-            const desc = [
-                age ? `年龄: ${age}` : '',
-                gender ? `性别: ${gender}` : '',
-                species ? `物种: ${species}` : '',
-                otherTraits ? `其他特征: ${otherTraits}` : ''
-            ].filter(Boolean).join(', ');
+            const formValues = getCharacterFormValues();
+            const name = formValues.name || "Unnamed";
+            const desc = buildCharacterDescription(formValues);
 
             const designSheet = window.lastGeneratedDesignSheet || document.getElementById('tempResultImg').src;
             const avatar = window.lastGeneratedAvatar || designSheet;
@@ -2866,10 +3013,15 @@ Layout Logic: ${page.layout_logic}`;
                 const char = state.characters.find(c => c.id === editingCharId);
                 if (char) {
                     char.name = name;
-                    char.age = age;
-                    char.gender = gender;
-                    char.species = species;
-                    char.otherTraits = otherTraits;
+                    char.age = formValues.age;
+                    char.gender = formValues.gender;
+                    char.species = formValues.species;
+                    char.role = formValues.role;
+                    char.personality = formValues.personality;
+                    char.appearance = formValues.appearance;
+                    char.outfit = formValues.outfit;
+                    char.background = formValues.background;
+                    char.otherTraits = formValues.otherTraits;
                     char.desc = desc;
                     char.designSheet = designSheet;
                     char.avatar = avatar;
@@ -2883,7 +3035,23 @@ Layout Logic: ${page.layout_logic}`;
                 }
             } else {
                 const id = Date.now();
-                const charData = { id, name, age, gender, species, otherTraits, desc, avatar, designSheet, img: avatar };
+                const charData = {
+                    id,
+                    name,
+                    age: formValues.age,
+                    gender: formValues.gender,
+                    species: formValues.species,
+                    role: formValues.role,
+                    personality: formValues.personality,
+                    appearance: formValues.appearance,
+                    outfit: formValues.outfit,
+                    background: formValues.background,
+                    otherTraits: formValues.otherTraits,
+                    desc,
+                    avatar,
+                    designSheet,
+                    img: avatar
+                };
                 state.characters.push(charData);
 
                 const grid = document.getElementById('attachedCharacters');
@@ -3299,7 +3467,7 @@ Layout Logic: ${page.layout_logic}`;
 
             if (sortedTasks.length === 0) {
                 container.innerHTML = `
-                    <div class="task-card-glass rounded-[24px] px-5 py-6 text-center">
+                    <div class="task-card-glass rounded-[20px] px-5 py-6 text-center">
                         <div class="w-11 h-11 rounded-[18px] mx-auto mb-3 bg-white/80 border border-white/90 shadow-[0_10px_22px_rgba(130,142,177,0.1)] flex items-center justify-center text-[#9aa3bd]">
                             <i data-lucide="file-plus-2" class="w-4 h-4"></i>
                         </div>
@@ -3326,17 +3494,16 @@ Layout Logic: ${page.layout_logic}`;
                 }
                 
                 html += `
-                    <div onclick="switchTask('${task.id}')" class="task-card-glass p-4 rounded-[24px] ${isActive ? 'ring-2 ring-[#8f84ff]/70 shadow-[0_20px_38px_rgba(124,113,255,0.16)]' : 'hover:ring-1 hover:ring-white/80'} cursor-pointer relative overflow-hidden group transition-all">
-                        ${isActive ? '<div class="absolute inset-0 bg-[linear-gradient(135deg,rgba(124,113,255,0.12),transparent_36%)]"></div>' : ''}
+                    <div onclick="switchTask('${task.id}')" class="task-card-glass p-4 rounded-[20px] ${isActive ? 'border-[#8f84ff] bg-[#f8f7ff]' : 'hover:border-[#dbe2ef]'} cursor-pointer relative overflow-hidden group transition-colors">
                         <div class="flex items-center gap-3">
-                            <div class="w-11 h-11 rounded-[18px] ${iconColor} flex items-center justify-center shrink-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+                            <div class="w-11 h-11 rounded-[18px] ${iconColor} flex items-center justify-center shrink-0">
                                 ${iconHtml}
                             </div>
                             <div class="flex-1 min-w-0">
                                 <h4 class="text-sm font-extrabold text-[#1f2740] truncate">${task.title || 'Draft Task'}</h4>
                                 <p class="text-[11px] ${statusColor} font-semibold">${statusText}</p>
                             </div>
-                            <button onclick="event.stopPropagation(); deleteTask('${task.id}')" class="opacity-0 group-hover:opacity-100 text-[#9aa3ba] hover:text-red-500 transition-all shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/70">
+                            <button onclick="event.stopPropagation(); deleteTask('${task.id}')" class="opacity-0 group-hover:opacity-100 text-[#9aa3ba] hover:text-red-500 transition-all shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#f6f8fc]">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
                         </div>
