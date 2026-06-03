@@ -1681,6 +1681,45 @@
             return error instanceof Error && /timed out|timeout/i.test(error.message);
         }
 
+        function toRequestedPageCount(rawValue) {
+            const parsed = Number.parseInt(String(rawValue || "1"), 10);
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+        }
+
+        async function requestStoryboardPagination({ expandedStory, pagesCount, ratio, style, retry = false }) {
+            const strictnessNote = retry
+                ? `\n\nIMPORTANT RETRY RULES:\n- You previously returned the wrong number of pages.\n- You MUST return exactly ${pagesCount} page objects inside pages.\n- pages.length MUST equal ${pagesCount}.\n- page_number MUST start at 1 and increase by 1 with no gaps.`
+                : '';
+
+            const storyboardRes = await callWorkflowTextModel(
+                SYSTEM_PROMPTS.STORY_PAGINATION,
+                `Pages: ${pagesCount}\nRatio: ${ratio}\nStyle: ${style}\n\nStory:\n${expandedStory}${strictnessNote}`,
+                true
+            );
+
+            if (!storyboardRes) {
+                throw new Error("Pagination failed.");
+            }
+
+            let storyboardJson;
+            try {
+                const cleanStr = storyboardRes.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                storyboardJson = JSON.parse(cleanStr);
+            } catch (error) {
+                throw new Error("Invalid storyboard format.");
+            }
+
+            if (!storyboardJson || !Array.isArray(storyboardJson.pages)) {
+                throw new Error("Storyboard response missing pages array.");
+            }
+
+            if (storyboardJson.pages.length !== pagesCount) {
+                throw new Error(`Storyboard returned ${storyboardJson.pages.length}/${pagesCount} pages.`);
+            }
+
+            return storyboardJson;
+        }
+
         function createStableHash(input) {
             let hash = 0;
             const normalized = String(input || '');
@@ -1833,6 +1872,235 @@
             }
 
             throw lastError || new Error(`Comic render page ${pageNumber} failed`);
+        }
+
+        function getComicGridAspectRatio(ratio) {
+            if (ratio === "16:9") return "16/9";
+            if (ratio === "9:16") return "9/16";
+            if (ratio === "4:5") return "4/5";
+            if (ratio === "3:4") return "3/4";
+            return "1/1";
+        }
+
+        function buildComicPageScenePrompt(page, style, charContextText) {
+            return `[CHARACTER REFERENCES]
+${charContextText}
+[ART STYLE OVERRIDE]
+Render in style: ${style}.
+NO WATERMARKS, NO SIGNATURES, NO LOGOS.
+[PAGE INSTRUCTIONS]
+Page ${page.page_number}.
+Action & Environment: ${page.page_story}
+Dialogue (draw speech bubbles): "${page.dialogue || "None"}"
+Panel Count: ${page.panel_count}
+Layout Logic: ${page.layout_logic}`;
+        }
+
+        function buildComicPageRequestParts({ page, style, charContextText, inlineDataParts, isCustomStyleWithImage, previousReference = null }) {
+            const scenePrompt = buildComicPageScenePrompt(page, style, charContextText);
+            let requestParts = [{ text: SYSTEM_PROMPTS.COMIC_RENDER + "\n\n" + scenePrompt }];
+
+            if (isCustomStyleWithImage) {
+                requestParts.push({ text: "Use the following image as a STRICT GLOBAL ART STYLE AND COLOR REFERENCE. Do NOT copy the action, ONLY art style and rendering technique:" });
+                requestParts.push({ inlineData: { mimeType: customStyleImageMimeType, data: customStyleImageBase64 } });
+            }
+
+            if (previousReference) {
+                requestParts.push({ text: "Use the following image as a STRICT STYLE AND ATMOSPHERE REFERENCE for continuity. Do NOT copy the action, ONLY art style:" });
+                if (previousReference.mimeType && previousReference.data) {
+                    requestParts.push({ inlineData: { mimeType: previousReference.mimeType, data: previousReference.data } });
+                } else if (previousReference.imageUrl) {
+                    requestParts.push({ imageUrl: previousReference.imageUrl });
+                }
+            }
+
+            return requestParts.concat(inlineDataParts || []);
+        }
+
+        function updateComicProgress({ completed, failed, total }) {
+            const progressText = document.getElementById('progressText');
+            const progressBar = document.getElementById('progressBar');
+            if (!progressText || !progressBar) return;
+
+            const finished = completed + failed;
+            progressText.innerText = failed > 0
+                ? `已完成 ${completed}/${total} · 失败 ${failed}`
+                : `已完成 ${completed}/${total}...`;
+            progressBar.style.width = `${total > 0 ? (finished / total) * 100 : 0}%`;
+        }
+
+        function renderComicGridPages(pages, ratio) {
+            const grid = document.getElementById('comicGrid');
+            if (!grid) return;
+
+            const styleRatio = getComicGridAspectRatio(ratio || "3:4");
+            grid.innerHTML = '';
+
+            (pages || []).forEach((page, index) => {
+                const status = page.renderStatus || (page.imgData ? 'success' : 'loading');
+                const card = document.createElement('div');
+                card.className = "relative border border-[#dde4ee] bg-white rounded-[24px] overflow-hidden w-full shrink-0 grow-0 shadow-sm";
+                card.style.aspectRatio = styleRatio;
+
+                let bodyHtml = '';
+                if (status === 'success' && page.imgData) {
+                    bodyHtml = `
+                        <img src="${page.imgData}" class="w-full h-full object-cover block cursor-pointer" onclick="openComicViewer(${index})">
+                        <button class="absolute inset-0 bg-black/45 text-white flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity font-bold text-sm" onclick="openComicViewer(${index})">点击进入阅读模式</button>
+                    `;
+                } else if (status === 'failed') {
+                    const safeMessage = String(page.renderError || '页面生成失败')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;');
+                    bodyHtml = `
+                        <div class="w-full h-full flex flex-col items-center justify-center text-center px-5 bg-[#fafbfd]">
+                            <div class="w-12 h-12 rounded-2xl bg-[#fff1f3] text-[#d45f76] flex items-center justify-center mb-4">
+                                <i data-lucide="alert-circle" class="w-5 h-5"></i>
+                            </div>
+                            <p class="text-sm font-bold text-[#1f2740] mb-2">第 ${page.page_number || index + 1} 页生成失败</p>
+                            <p class="text-[11px] text-[#8a94ad] leading-5 max-w-[220px] mb-4">${safeMessage}</p>
+                            <button class="px-4 py-2 rounded-xl bg-[#111827] text-white text-xs font-bold hover:bg-[#1f2937] transition-colors" onclick="regenerateComicPageAtIndex(${index})">重新生成此页</button>
+                        </div>
+                    `;
+                } else {
+                    bodyHtml = `
+                        <div class="w-full h-full flex flex-col items-center justify-center text-center px-5 bg-[linear-gradient(180deg,#ffffff_0%,#f7f9fc_100%)]">
+                            <div class="relative w-12 h-12 mb-4">
+                                <div class="absolute inset-0 rounded-full border-4 border-[#e9edf5]"></div>
+                                <div class="absolute inset-0 rounded-full border-4 border-transparent border-t-[#7d71ff] animate-spin"></div>
+                            </div>
+                            <p class="text-sm font-bold text-[#1f2740] mb-2">第 ${page.page_number || index + 1} 页生成中</p>
+                            <p class="text-[11px] text-[#8a94ad]">正在并发渲染漫画页面...</p>
+                        </div>
+                    `;
+                }
+
+                card.innerHTML = `
+                    ${bodyHtml}
+                    <div class="absolute top-3 left-3 bg-[#111827]/78 text-white text-[10px] px-2 py-1 rounded-lg font-bold tracking-wide">PAGE ${page.page_number || index + 1}</div>
+                `;
+                grid.appendChild(card);
+            });
+
+            lucide.createIcons();
+        }
+
+        async function regenerateComicPageAtIndex(index, options = {}) {
+            const pages = window.generatedComicPages || state.generatedComicPages || [];
+            const page = pages[index];
+            if (!page) return;
+
+            const ratio = options.ratio || document.getElementById('aspectRatioSelect').value || "3:4";
+            const rawStyleOption = options.rawStyleOption || document.getElementById('artStyleSelect').value;
+            let style = options.style || rawStyleOption;
+
+            if (!options.style) {
+                if (rawStyleOption === 'auto') {
+                    const expandedStory = state.expandedStory;
+                    if (expandedStory) {
+                        const autoStyle = await callWorkflowTextModel(SYSTEM_PROMPTS.STYLE_AUTO_MATCH, `Story:\n${expandedStory}`);
+                        style = autoStyle || "Japanese manga style";
+                    } else {
+                        style = "Japanese manga style";
+                    }
+                } else if (rawStyleOption === 'custom') {
+                    style = document.getElementById('customStyleText').value || "Professional comic style";
+                }
+            }
+
+            let charContextText = "CRITICAL CHARACTER REFERENCES:\n";
+            (state.selectedCharacters || []).slice(0, 5).forEach((char, charIndex) => {
+                charContextText += `- Character Name: "${char.name}". This is Reference Image ${charIndex + 1}. You MUST strictly copy their exact facial features, hair, clothing, etc.\n`;
+            });
+            const inlineDataParts = buildSelectedCharacterPromptParts(state.selectedCharacters || []);
+            const previousReference = options.includePreviousReference === false
+                ? null
+                : (index > 0 ? (pages[index - 1]?.rawData || null) : null);
+
+            const requestParts = buildComicPageRequestParts({
+                page,
+                style,
+                charContextText,
+                inlineDataParts,
+                isCustomStyleWithImage: rawStyleOption === 'custom' && customStyleImageBase64,
+                previousReference
+            });
+
+            page.renderStatus = 'loading';
+            page.renderError = null;
+            renderComicGridPages(pages, ratio);
+
+            if (options.fromViewer) {
+                const btn = document.getElementById('viewerRegenBtn');
+                const imgEl = document.getElementById('comicViewerImg');
+                btn.dataset.originalHtml = btn.innerHTML;
+                btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 重新生成中...';
+                btn.disabled = true;
+                if (imgEl) imgEl.style.opacity = '0.5';
+                lucide.createIcons();
+            }
+
+            try {
+                const response = await generateComicRenderPageWithRetry({
+                    prompt: buildComicPageScenePrompt(page, style, charContextText),
+                    promptParts: requestParts,
+                    aspectRatio: ratio,
+                    pageNumber: page.page_number
+                });
+                const base64Image = response.images?.[0];
+                if (!base64Image) {
+                    throw new Error(`Page ${page.page_number} returned no image`);
+                }
+                const rawData = extractGeneratedInlineData(base64Image, response.raw) || (base64Image.startsWith('http') ? { imageUrl: base64Image } : null);
+
+                page.imgData = base64Image;
+                page.rawData = rawData;
+                page.renderStatus = 'success';
+                page.renderError = null;
+
+                state.generatedComicPages = JSON.parse(JSON.stringify(pages));
+                window.generatedComicPages = state.generatedComicPages;
+                renderComicGridPages(window.generatedComicPages, ratio);
+
+                const task = state.tasks.find(t => t.id === state.currentTaskId);
+                if (task) {
+                    task.generatedComicPages = JSON.parse(JSON.stringify(window.generatedComicPages));
+                    if (task.executions && task.executions.length > 0) {
+                        const activeExec = task.executions.find(exec => exec.id === state.currentExecutionId) || task.executions[0];
+                        if (activeExec) {
+                            activeExec.pages = JSON.parse(JSON.stringify(window.generatedComicPages));
+                        }
+                    }
+                }
+                state.executions = task?.executions || state.executions;
+                saveCurrentTask();
+                renderExecutions();
+                renderTasks();
+                saveStateToLocal();
+
+                if (options.fromViewer) {
+                    updateComicViewer();
+                }
+            } catch (e) {
+                page.renderStatus = 'failed';
+                page.renderError = e.message || '页面生成失败';
+                renderComicGridPages(pages, ratio);
+                if (options.fromViewer) {
+                    updateComicViewer();
+                    alert("Error regenerating page: " + page.renderError);
+                }
+            } finally {
+                if (options.fromViewer) {
+                    const btn = document.getElementById('viewerRegenBtn');
+                    const imgEl = document.getElementById('comicViewerImg');
+                    btn.innerHTML = btn.dataset.originalHtml || '<i data-lucide="refresh-cw" class="w-4 h-4"></i> 重新生成此页';
+                    btn.disabled = false;
+                    if (imgEl) imgEl.style.opacity = '1';
+                    lucide.createIcons();
+                }
+            }
         }
 
         function buildImageRequestPayload({ prompt, promptParts, aspectRatio, modelKeyOverride, apiKeyOverride, requestKey }) {
@@ -2213,85 +2481,96 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                     state.expandedStory = expandedStory;
                 });
 
-                updateUI(() => {
-                    const status = document.getElementById('agentStatus');
-                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 2/5：提取出场角色中...</span>`;
-                    lucide.createIcons();
-                });
-                const extractedJson = await callWorkflowTextModel(SYSTEM_PROMPTS.CHARACTER_EXTRACTION, `Story:\n${expandedStory}`, true);
-                let extractedChars = [];
-                try {
-                    const cleanJson = (extractedJson || "[]").replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-                    extractedChars = JSON.parse(cleanJson);
-                } catch (e) {
-                    console.error("Parse error for chars:", e);
-                }
+                const hasUserCharacters = (task.selectedCharacters && task.selectedCharacters.length > 0)
+                    || (task.characters && task.characters.length > 0);
 
-                updateUI(() => {
-                    const status = document.getElementById('agentStatus');
-                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 3/5：并行生成角色设计图...</span>`;
-                    lucide.createIcons();
-                });
-
-                const createdCharacterIds = new Set(
-                    (task.selectedCharacters || []).map((character) => character.id)
-                );
-                const charPromises = extractedChars.map(async (char) => {
-                    const exists = findExistingCharacterByName(task.selectedCharacters, char.name);
-                    if (exists) {
-                        return { status: 'skipped', name: char.name };
-                    }
-
-                    const avatar = await apiCharacterDesign(char);
-                    char.avatar = avatar;
-                    const age = char.apparent_age_stage || '';
-                    const gender = char.gender || '';
-                    const species = char.species || '';
-                    const otherTraits = [
-                        `角色身份: ${char.role || ''}`,
-                        `外观特征: ${(char.distinct_physical_traits || []).join(', ')}`,
-                        `核心性格: ${(char.core_traits || []).join(', ')}`,
-                        `视觉气质: ${char.visual_energy_profile || ''}`
-                    ].filter(s => s && !s.endsWith(': ')).join(' | ');
-
-                    const fullDesc = [
-                        age ? `年龄: ${age}` : '',
-                        gender ? `性别: ${gender}` : '',
-                        species ? `物种: ${species}` : '',
-                        otherTraits ? `其他特征: ${otherTraits}` : ''
-                    ].filter(Boolean).join(', ');
-
-                    const id = Date.now() + Math.random();
-                    const charData = { id, name: char.name, age, gender, species, otherTraits, desc: fullDesc, avatar, designSheet: avatar, img: avatar };
-                    task.characters.push(charData);
-                    task.selectedCharacters.push(charData);
+                if (!hasUserCharacters) {
                     updateUI(() => {
-                        if (createdCharacterIds.has(charData.id)) {
-                            return;
-                        }
-                        createdCharacterIds.add(charData.id);
-                        state.characters.push(charData);
-                        state.selectedCharacters.push(charData);
-                        renderCharacterCard(charData, true);
+                        const status = document.getElementById('agentStatus');
+                        status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 2/5：提取出场角色中...</span>`;
                         lucide.createIcons();
                     });
-                    return { status: 'generated', name: char.name, charData };
-                });
+                    const extractedJson = await callWorkflowTextModel(SYSTEM_PROMPTS.CHARACTER_EXTRACTION, `Story:\n${expandedStory}`, true);
+                    let extractedChars = [];
+                    try {
+                        const cleanJson = (extractedJson || "[]").replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                        extractedChars = JSON.parse(cleanJson);
+                    } catch (e) {
+                        console.error("Parse error for chars:", e);
+                    }
 
-                const charResults = await Promise.allSettled(charPromises);
-                const failedCharacters = charResults
-                    .filter(result => result.status === 'rejected')
-                    .map(result => result.reason?.message || 'Unknown character generation error');
-                if (failedCharacters.length > 0) {
-                    throw new Error(failedCharacters.join('；'));
+                    updateUI(() => {
+                        const status = document.getElementById('agentStatus');
+                        status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> 步骤 3/5：并行生成角色设计图...</span>`;
+                        lucide.createIcons();
+                    });
+
+                    const createdCharacterIds = new Set(
+                        (task.selectedCharacters || []).map((character) => character.id)
+                    );
+                    const charPromises = extractedChars.map(async (char) => {
+                        const exists = findExistingCharacterByName(task.selectedCharacters, char.name);
+                        if (exists) {
+                            return { status: 'skipped', name: char.name };
+                        }
+
+                        const avatar = await apiCharacterDesign(char);
+                        char.avatar = avatar;
+                        const age = char.apparent_age_stage || '';
+                        const gender = char.gender || '';
+                        const species = char.species || '';
+                        const otherTraits = [
+                            `角色身份: ${char.role || ''}`,
+                            `外观特征: ${(char.distinct_physical_traits || []).join(', ')}`,
+                            `核心性格: ${(char.core_traits || []).join(', ')}`,
+                            `视觉气质: ${char.visual_energy_profile || ''}`
+                        ].filter(s => s && !s.endsWith(': ')).join(' | ');
+
+                        const fullDesc = [
+                            age ? `年龄: ${age}` : '',
+                            gender ? `性别: ${gender}` : '',
+                            species ? `物种: ${species}` : '',
+                            otherTraits ? `其他特征: ${otherTraits}` : ''
+                        ].filter(Boolean).join(', ');
+
+                        const id = Date.now() + Math.random();
+                        const charData = { id, name: char.name, age, gender, species, otherTraits, desc: fullDesc, avatar, designSheet: avatar, img: avatar };
+                        task.characters.push(charData);
+                        task.selectedCharacters.push(charData);
+                        updateUI(() => {
+                            if (createdCharacterIds.has(charData.id)) {
+                                return;
+                            }
+                            createdCharacterIds.add(charData.id);
+                            state.characters.push(charData);
+                            state.selectedCharacters.push(charData);
+                            renderCharacterCard(charData, true);
+                            lucide.createIcons();
+                        });
+                        return { status: 'generated', name: char.name, charData };
+                    });
+
+                    const charResults = await Promise.allSettled(charPromises);
+                    const failedCharacters = charResults
+                        .filter(result => result.status === 'rejected')
+                        .map(result => result.reason?.message || 'Unknown character generation error');
+                    if (failedCharacters.length > 0) {
+                        throw new Error(failedCharacters.join('；'));
+                    }
+                    updateUI(() => { lucide.createIcons(); });
+
+                    updateUI(() => {
+                        const status = document.getElementById('agentStatus');
+                        status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="check" class="w-3 h-3 text-green-500"></i> 角色提取完成，即将开始绘制...</span>`;
+                        lucide.createIcons();
+                    });
+                } else {
+                    updateUI(() => {
+                        const status = document.getElementById('agentStatus');
+                        status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="user-check" class="w-3 h-3"></i> 已检测到用户角色，跳过自动创角...</span>`;
+                        lucide.createIcons();
+                    });
                 }
-                updateUI(() => { lucide.createIcons(); });
-
-                updateUI(() => {
-                    const status = document.getElementById('agentStatus');
-                    status.innerHTML = `<span class="agent-processing flex items-center gap-1.5"><i data-lucide="check" class="w-3 h-3 text-green-500"></i> 角色提取完成，即将开始绘制...</span>`;
-                    lucide.createIcons();
-                });
 
                 await continueToPagination(generatingTaskId);
             } catch (e) {
@@ -2340,7 +2619,7 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                     lucide.createIcons();
                 });
 
-                const pagesCount = task.pages || "5";
+                const pagesCount = toRequestedPageCount(task.pages || "5");
                 const rawStyleOption = task.style || "auto";
                 const ratio = task.ratio || "3:4";
                 const expandedStory = task.expandedStory;
@@ -2366,19 +2645,24 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                     lucide.createIcons();
                 });
 
-                const storyboardRes = await callWorkflowTextModel(
-                    SYSTEM_PROMPTS.STORY_PAGINATION,
-                    `Pages: ${pagesCount}\nRatio: ${ratio}\nStyle: ${style}\n\nStory:\n${expandedStory}`,
-                    true
-                );
-                if (!storyboardRes) throw new Error("Pagination failed.");
-
                 let storyboardJson;
                 try {
-                    const cleanStr = storyboardRes.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-                    storyboardJson = JSON.parse(cleanStr);
-                } catch (e) {
-                    throw new Error("Invalid storyboard format.");
+                    storyboardJson = await requestStoryboardPagination({
+                        expandedStory,
+                        pagesCount,
+                        ratio,
+                        style,
+                        retry: false
+                    });
+                } catch (firstPaginationError) {
+                    console.warn('Storyboard pagination first attempt failed:', firstPaginationError);
+                    storyboardJson = await requestStoryboardPagination({
+                        expandedStory,
+                        pagesCount,
+                        ratio,
+                        style,
+                        retry: true
+                    });
                 }
 
                 updateUI(() => {
@@ -2398,86 +2682,81 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                 });
                 inlineDataParts = buildSelectedCharacterPromptParts(task.selectedCharacters || []);
 
-                let taskComicPages = [];
-                const total = storyboardJson.pages.length;
-                let previousPanelData = null;
+                let taskComicPages = storyboardJson.pages.map((page) => ({
+                    ...page,
+                    imgData: null,
+                    rawData: null,
+                    renderStatus: 'loading',
+                    renderError: null
+                }));
+                const total = pagesCount;
+                let completedPages = 0;
+                let failedPages = 0;
 
-                let styleRatio = "1/1";
-                if (ratio === "16:9") styleRatio = "16/9";
-                else if (ratio === "9:16") styleRatio = "9/16";
-                else if (ratio === "4:5") styleRatio = "4/5";
-                else if (ratio === "3:4") styleRatio = "3/4";
+                updateUI(() => {
+                    window.generatedComicPages = taskComicPages;
+                    state.generatedComicPages = taskComicPages;
+                    renderComicGridPages(taskComicPages, ratio);
+                    updateComicProgress({ completed: 0, failed: 0, total });
+                });
 
-                for (let i = 0; i < total; i++) {
-                    const page = storyboardJson.pages[i];
-                    updateUI(() => {
-                        const progressText = document.getElementById('progressText');
-                        const progressBar = document.getElementById('progressBar');
-                        progressText.innerText = `Generating Page ${i + 1}/${total}...`;
-                        progressBar.style.width = `${(i / total) * 100}%`;
+                const renderPromises = storyboardJson.pages.map((page, i) => {
+                    const scenePrompt = buildComicPageScenePrompt(page, style, charContextText);
+                    const requestParts = buildComicPageRequestParts({
+                        page,
+                        style,
+                        charContextText,
+                        inlineDataParts,
+                        isCustomStyleWithImage,
+                        previousReference: null
                     });
 
-                    const scenePrompt = `[CHARACTER REFERENCES]
-${charContextText}
-[ART STYLE OVERRIDE]
-Render in style: ${style}.
-NO WATERMARKS, NO SIGNATURES, NO LOGOS.
-[PAGE INSTRUCTIONS]
-Page ${page.page_number}.
-Action & Environment: ${page.page_story}
-Dialogue (draw speech bubbles): "${page.dialogue || "None"}"
-Panel Count: ${page.panel_count}
-Layout Logic: ${page.layout_logic}`;
-
-                    let requestParts = [{ text: SYSTEM_PROMPTS.COMIC_RENDER + "\n\n" + scenePrompt }];
-                    if (isCustomStyleWithImage) {
-                        requestParts.push({ text: "Use the following image as a STRICT GLOBAL ART STYLE AND COLOR REFERENCE. Do NOT copy the action, ONLY art style and rendering technique:" });
-                        requestParts.push({ inlineData: { mimeType: customStyleImageMimeType, data: customStyleImageBase64 } });
-                    }
-                    if (previousPanelData) {
-                        requestParts.push({ text: "Use the following image as a STRICT STYLE AND ATMOSPHERE REFERENCE for continuity. Do NOT copy the action, ONLY art style:" });
-                        if (previousPanelData.mimeType && previousPanelData.data) {
-                            requestParts.push({ inlineData: { mimeType: previousPanelData.mimeType, data: previousPanelData.data } });
-                        } else if (previousPanelData.imageUrl) {
-                            requestParts.push({ imageUrl: previousPanelData.imageUrl });
-                        }
-                    }
-                    requestParts = requestParts.concat(inlineDataParts);
-
-                    const result = await generateComicRenderPageWithRetry({
+                    return generateComicRenderPageWithRetry({
                         prompt: scenePrompt,
                         promptParts: requestParts,
                         aspectRatio: ratio,
                         pageNumber: page.page_number
+                    }).then((result) => {
+                        const base64Image = result.images?.[0];
+                        if (!base64Image) {
+                            throw new Error(`Comic render page ${page.page_number} returned no image`);
+                        }
+                        const inlineData = extractGeneratedInlineData(base64Image, result.raw);
+                        taskComicPages[i] = {
+                            ...taskComicPages[i],
+                            imgData: base64Image,
+                            rawData: inlineData || (base64Image.startsWith('http') ? { imageUrl: base64Image } : null),
+                            renderStatus: 'success',
+                            renderError: null
+                        };
+                        completedPages += 1;
+                        updateUI(() => {
+                            window.generatedComicPages = taskComicPages;
+                            state.generatedComicPages = taskComicPages;
+                            renderComicGridPages(taskComicPages, ratio);
+                            updateComicProgress({ completed: completedPages, failed: failedPages, total });
+                        });
+                    }).catch((error) => {
+                        taskComicPages[i] = {
+                            ...taskComicPages[i],
+                            renderStatus: 'failed',
+                            renderError: error.message || `Page ${page.page_number} failed`
+                        };
+                        failedPages += 1;
+                        updateUI(() => {
+                            window.generatedComicPages = taskComicPages;
+                            state.generatedComicPages = taskComicPages;
+                            renderComicGridPages(taskComicPages, ratio);
+                            updateComicProgress({ completed: completedPages, failed: failedPages, total });
+                        });
                     });
-                    const base64Image = result.images?.[0];
-                    const inlineData = extractGeneratedInlineData(base64Image, result.raw);
+                });
 
-                    previousPanelData = inlineData || (base64Image.startsWith('http') ? { imageUrl: base64Image } : null);
-                    taskComicPages.push({
-                        ...page,
-                        imgData: base64Image,
-                        rawData: inlineData || (base64Image.startsWith('http') ? { imageUrl: base64Image } : null)
-                    });
+                await Promise.all(renderPromises);
 
-                    updateUI(() => {
-                        const grid = document.getElementById('comicGrid');
-                        const imgContainer = document.createElement('div');
-                        imgContainer.className = `relative border-[3px] border-black bg-white flex flex-col group overflow-hidden w-full shrink-0 grow-0`;
-                        imgContainer.style.aspectRatio = styleRatio;
-                        imgContainer.innerHTML = `
-                            <img src="${base64Image}" class="w-full h-full object-cover block cursor-pointer" onclick="openComicViewer(${i})">
-                            <div class="absolute top-2 left-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded font-bold">PAGE ${page.page_number}</div>
-                            <button class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-bold text-sm" onclick="openComicViewer(${i})">点击进入阅读模式</button>
-                        `;
-                        grid.appendChild(imgContainer);
-                        window.generatedComicPages = taskComicPages;
-                        state.generatedComicPages = window.generatedComicPages;
-                    });
-                }
-
-                if (taskComicPages.length !== total) {
-                    throw new Error(`Comic render completed with missing pages: expected ${total}, received ${taskComicPages.length}`);
+                const succeededPages = taskComicPages.filter((page) => page.renderStatus === 'success' && page.imgData).length;
+                if (succeededPages === 0) {
+                    throw new Error("All comic pages failed to render.");
                 }
 
                 const newExecution = {
@@ -2497,11 +2776,13 @@ Layout Logic: ${page.layout_logic}`;
                     const progressText = document.getElementById('progressText');
                     const progressBox = document.getElementById('comicGenProgress');
                     progressBar.style.width = `100%`;
-                    progressText.innerText = "Complete ✨";
-                    setTimeout(() => { progressBox.classList.add('hidden'); }, 2000);
+                    progressText.innerText = failedPages > 0 ? `完成 ${completedPages}/${total} · 失败 ${failedPages}` : "Complete ✨";
+                    setTimeout(() => { progressBox.classList.add('hidden'); }, 2500);
                     document.getElementById('downloadFullComicBtn').classList.remove('hidden');
                     document.getElementById('downloadZipBtn').classList.remove('hidden');
-                    document.getElementById('agentStatus').innerHTML = `<span class="text-green-500 font-bold">全部生成完毕！</span>`;
+                    document.getElementById('agentStatus').innerHTML = failedPages > 0
+                        ? `<span class="text-amber-600 font-bold">${completedPages} 页完成，${failedPages} 页失败，可单独重新生成失败页。</span>`
+                        : `<span class="text-green-500 font-bold">全部生成完毕！</span>`;
                     const btn = document.getElementById('oneClickGenerateBtn');
                     btn.innerHTML = `<span>修改故事/漫画</span><i data-lucide="edit-3" class="w-4 h-4"></i>`;
                     btn.disabled = false;
@@ -2594,30 +2875,7 @@ Layout Logic: ${page.layout_logic}`;
                 state.currentExecutionId = execId;
                 window.generatedComicPages = JSON.parse(JSON.stringify(exec.pages));
                 state.generatedComicPages = window.generatedComicPages;
-            
-            const grid = document.getElementById('comicGrid');
-            grid.innerHTML = '';
-            
-            let styleRatio = "1/1";
-            const ratio = document.getElementById('aspectRatioSelect').value || "3:4";
-            if (ratio === "16:9") styleRatio = "16/9";
-            else if (ratio === "9:16") styleRatio = "9/16";
-            else if (ratio === "4:5") styleRatio = "4/5";
-            else if (ratio === "3:4") styleRatio = "3/4";
-
-            window.generatedComicPages.forEach((page, i) => {
-                if (page.imgData) {
-                    const imgContainer = document.createElement('div');
-                    imgContainer.className = `relative border-[3px] border-black bg-white flex flex-col group overflow-hidden w-full shrink-0 grow-0`;
-                    imgContainer.style.aspectRatio = styleRatio;
-                    imgContainer.innerHTML = `
-                        <img src="${page.imgData}" class="w-full h-full object-cover block cursor-pointer" onclick="openComicViewer(${i})">
-                        <div class="absolute top-2 left-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded font-bold">PAGE ${page.page_number}</div>
-                        <button class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-bold text-sm" onclick="openComicViewer(${i})">点击进入阅读模式</button>
-                    `;
-                    grid.appendChild(imgContainer);
-                }
-            });
+            renderComicGridPages(window.generatedComicPages, document.getElementById('aspectRatioSelect').value || "3:4");
             
             renderExecutions();
         }
@@ -3174,100 +3432,12 @@ Layout Logic: ${page.layout_logic}`;
             page.layout_logic = document.getElementById('viewerPageLayout').value;
             page.panel_count = parseInt(document.getElementById('viewerPagePanelCount').value, 10);
 
-            const rawStyleOption = document.getElementById('artStyleSelect').value;
-            let style = rawStyleOption;
-            if (rawStyleOption === 'auto') {
-                const expandedStory = state.expandedStory;
-                if (expandedStory) {
-                    const autoStyle = await callWorkflowTextModel(SYSTEM_PROMPTS.STYLE_AUTO_MATCH, `Story:\n${expandedStory}`);
-                    style = autoStyle || "Japanese manga style";
-                } else {
-                    style = "Japanese manga style";
-                }
-            } else if (rawStyleOption === 'custom') {
-                style = document.getElementById('customStyleText').value || "Professional comic style";
-            }
-            const ratio = document.getElementById('aspectRatioSelect').value;
-            const requestParts = [];
-            requestParts.push({
-                text: [
-                    SYSTEM_PROMPTS.COMIC_RENDER,
-                    "[ART STYLE OVERRIDE]",
-                    `Render in style: ${style}.`,
-                    "NO WATERMARKS, NO SIGNATURES, NO LOGOS.",
-                    "[PAGE INSTRUCTIONS]",
-                    `Page ${page.page_number}.`,
-                    `Action & Environment: ${page.page_story}`,
-                    `Dialogue (draw speech bubbles): "${page.dialogue || "None"}"`,
-                    `Panel Count: ${page.panel_count || 1}`,
-                    `Layout Logic: ${page.layout_logic || ""}`
-                ].join('\n')
+            await regenerateComicPageAtIndex(currentViewerIndex, {
+                fromViewer: true,
+                ratio: document.getElementById('aspectRatioSelect').value,
+                rawStyleOption: document.getElementById('artStyleSelect').value,
+                includePreviousReference: true
             });
-            if (customStyleImageBase64 && customStyleImageMimeType) {
-                requestParts.push({ text: "Use the following image as a STRICT GLOBAL ART STYLE AND COLOR REFERENCE. Do NOT copy the action, ONLY art style and rendering technique:" });
-                requestParts.push({ inlineData: { mimeType: customStyleImageMimeType, data: customStyleImageBase64 } });
-            }
-            if (currentViewerIndex > 0) {
-                const prevPage = window.generatedComicPages[currentViewerIndex - 1];
-                if (prevPage && prevPage.rawData && prevPage.rawData.mimeType && prevPage.rawData.data) {
-                    requestParts.push({ text: "Use the following image as a STRICT STYLE AND ATMOSPHERE REFERENCE for continuity. Do NOT copy the action, ONLY art style:" });
-                    requestParts.push({ inlineData: prevPage.rawData });
-                } else if (prevPage && prevPage.rawData && prevPage.rawData.imageUrl) {
-                    requestParts.push({ text: "Use the following image as a STRICT STYLE AND ATMOSPHERE REFERENCE for continuity. Do NOT copy the action, ONLY art style:" });
-                    requestParts.push({ imageUrl: prevPage.rawData.imageUrl });
-                }
-            }
-            requestParts.push(...buildSelectedCharacterPromptParts(state.selectedCharacters || []));
-
-            const btn = document.getElementById('viewerRegenBtn');
-            const originalBtnHtml = btn.innerHTML;
-            btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 重新生成中...';
-            btn.disabled = true;
-            lucide.createIcons();
-            
-            const imgEl = document.getElementById('comicViewerImg');
-            imgEl.style.opacity = '0.5';
-
-            try {
-                const imagePrompt = `Comic panel redraw in ${style}. Page ${page.page_number}. Action and environment: ${page.page_story}. Dialogue: ${page.dialogue || 'None'}. Layout logic: ${page.layout_logic}.`;
-                const response = await makeModelImageRequest({
-                    prompt: imagePrompt,
-                    promptParts: requestParts,
-                    aspectRatio: ratio
-                });
-                const base64Image = response.images[0];
-                const rawData = extractGeneratedInlineData(base64Image, response.raw) || (base64Image.startsWith('http') ? { imageUrl: base64Image } : null);
-                page.imgData = base64Image;
-                if (rawData) {
-                    page.rawData = rawData;
-                }
-                imgEl.src = base64Image;
-
-                const gridImages = document.querySelectorAll('#comicGrid img');
-                if (gridImages[currentViewerIndex]) {
-                    gridImages[currentViewerIndex].src = base64Image;
-                }
-
-                const newExecution = {
-                    id: Date.now().toString(),
-                    label: `第 ${state.executions.length + 1} 次执行`,
-                    createdAt: new Date().toLocaleString(),
-                    pages: JSON.parse(JSON.stringify(window.generatedComicPages))
-                };
-                state.executions.unshift(newExecution);
-                state.currentExecutionId = newExecution.id;
-                renderExecutions();
-                saveCurrentTask();
-                renderTasks();
-            } catch (e) {
-                console.error("Regen Error:", e);
-                alert("Error regenerating page: " + e.message);
-            }
-
-            imgEl.style.opacity = '1';
-            btn.innerHTML = originalBtnHtml;
-            btn.disabled = false;
-            lucide.createIcons();
         }
 
         // --- Layout UI Helpers ---
@@ -3623,27 +3793,9 @@ Layout Logic: ${page.layout_logic}`;
                 const latestExec = state.executions[0];
                 window.generatedComicPages = JSON.parse(JSON.stringify(latestExec.pages));
                 state.generatedComicPages = window.generatedComicPages;
-                
-                let styleRatio = "1/1";
-                const ratio = task.ratio || "3:4";
-                if (ratio === "16:9") styleRatio = "16/9";
-                else if (ratio === "9:16") styleRatio = "9/16";
-                else if (ratio === "4:5") styleRatio = "4/5";
-                else if (ratio === "3:4") styleRatio = "3/4";
 
-                latestExec.pages.forEach((page, i) => {
-                    if (page.imgData) {
-                        const imgContainer = document.createElement('div');
-                        imgContainer.className = `relative border-[3px] border-black bg-white flex flex-col group overflow-hidden w-full shrink-0 grow-0`;
-                        imgContainer.style.aspectRatio = styleRatio;
-                        imgContainer.innerHTML = `
-                            <img src="${page.imgData}" class="w-full h-full object-cover block cursor-pointer" onclick="openComicViewer(${i})">
-                            <div class="absolute top-2 left-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded font-bold">PAGE ${page.page_number}</div>
-                            <button class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-bold text-sm" onclick="openComicViewer(${i})">点击进入阅读模式</button>
-                        `;
-                        grid.appendChild(imgContainer);
-                    }
-                });
+                const ratio = task.ratio || "3:4";
+                renderComicGridPages(window.generatedComicPages, ratio);
             } else {
                 document.getElementById('welcomeState').classList.remove('hidden');
                 document.getElementById('expandedStoryBox').classList.add('hidden');
