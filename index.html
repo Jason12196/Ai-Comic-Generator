@@ -1145,44 +1145,47 @@
                         currentTaskId: state.currentTaskId
                     }));
                 };
-                
-                // First attempt: Strip only executions
-                let strippedTasks = state.tasks.map(t => ({
-                    ...t,
-                    executions: [], 
-                    generatedComicPages: null
-                }));
-                
+
                 try {
-                    attemptSave(strippedTasks);
+                    attemptSave(state.tasks.map(cloneSerializable));
                 } catch(e) {
                     if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.message.includes('quota')) {
-                        console.warn("Storage quota exceeded, aggressively stripping old task images...");
-                        // Second attempt: Strip images from non-current tasks
-                        strippedTasks = state.tasks.map(t => ({
+                        console.warn("Storage quota exceeded, stripping historical comic images first...");
+                        let strippedTasks = state.tasks.map(t => ({
                             ...t,
-                            executions: [],
-                            generatedComicPages: null,
+                            executions: t.id === state.currentTaskId
+                                ? (t.executions || []).slice(0, 1)
+                                : [],
+                            generatedComicPages: t.id === state.currentTaskId ? t.generatedComicPages || null : null,
                             characters: t.id === state.currentTaskId ? t.characters : t.characters.map(c => ({...c, avatar: null, designSheet: null, img: null})),
                             selectedCharacters: t.id === state.currentTaskId ? t.selectedCharacters : t.selectedCharacters.map(c => ({...c, avatar: null, designSheet: null, img: null}))
                         }));
-                        
-                        // We also need to clear state.characters and state.selectedCharacters global images if they are huge
-                        // For the global state itself, since we only save tasks and currentTaskId, we don't need to touch globals here.
-                        
+
                         try {
                             attemptSave(strippedTasks);
                         } catch (e2) {
-                            console.warn("Storage quota STILL exceeded, stripping ALL images...");
-                            // Third attempt: Strip ALL images to at least save the story/text
+                            console.warn("Storage quota still exceeded, stripping current execution images...");
                             strippedTasks = state.tasks.map(t => ({
                                 ...t,
                                 executions: [],
                                 generatedComicPages: null,
-                                characters: t.characters.map(c => ({...c, avatar: null, designSheet: null, img: null})),
-                                selectedCharacters: t.selectedCharacters.map(c => ({...c, avatar: null, designSheet: null, img: null}))
+                                characters: t.id === state.currentTaskId ? t.characters : t.characters.map(c => ({...c, avatar: null, designSheet: null, img: null})),
+                                selectedCharacters: t.id === state.currentTaskId ? t.selectedCharacters : t.selectedCharacters.map(c => ({...c, avatar: null, designSheet: null, img: null}))
                             }));
-                            attemptSave(strippedTasks);
+
+                            try {
+                                attemptSave(strippedTasks);
+                            } catch (e3) {
+                                console.warn("Storage quota still exceeded, stripping all images...");
+                                strippedTasks = state.tasks.map(t => ({
+                                    ...t,
+                                    executions: [],
+                                    generatedComicPages: null,
+                                    characters: t.characters.map(c => ({...c, avatar: null, designSheet: null, img: null})),
+                                    selectedCharacters: t.selectedCharacters.map(c => ({...c, avatar: null, designSheet: null, img: null}))
+                                }));
+                                attemptSave(strippedTasks);
+                            }
                         }
                     } else {
                         throw e;
@@ -2798,6 +2801,7 @@ Visual Energy: ${charObj.visual_energy_profile}`;
 
                 renderTasks();
                 saveStateToLocal();
+                scheduleTaskSync(cloneSerializable(task), true);
             } catch (e) {
                 console.error(e);
                 task.isGenerating = false;
@@ -3782,16 +3786,19 @@ Visual Energy: ${charObj.visual_energy_profile}`;
             grid.innerHTML = '';
             renderExecutions();
             
-            if (state.executions && state.executions.length > 0) {
+            const availablePages = (state.executions && state.executions.length > 0)
+                ? state.executions[0].pages
+                : state.generatedComicPages;
+
+            if (availablePages && availablePages.length > 0) {
                 document.getElementById('welcomeState').classList.add('hidden');
                 document.getElementById('expandedStoryBox').classList.add('hidden');
                 document.getElementById('comicResultBox').classList.remove('hidden');
                 document.getElementById('comicWrapper').classList.remove('hidden');
                 document.getElementById('downloadFullComicBtn').classList.remove('hidden');
                 document.getElementById('downloadZipBtn').classList.remove('hidden');
-                
-                const latestExec = state.executions[0];
-                window.generatedComicPages = JSON.parse(JSON.stringify(latestExec.pages));
+
+                window.generatedComicPages = JSON.parse(JSON.stringify(availablePages));
                 state.generatedComicPages = window.generatedComicPages;
 
                 const ratio = task.ratio || "3:4";
