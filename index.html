@@ -1073,6 +1073,14 @@
             taskSyncTimer = setTimeout(persist, 500);
         }
 
+        function persistCurrentTaskSnapshot(immediate = true) {
+            const task = saveCurrentTask();
+            if (!task) return null;
+            saveStateToLocal();
+            scheduleTaskSync(cloneSerializable(task), immediate);
+            return task;
+        }
+
         async function deleteTaskFromBackend(taskId) {
             if (!state.user) return;
 
@@ -2517,6 +2525,7 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                     storyInput.value = expandedStory;
                     state.expandedStory = expandedStory;
                 });
+                persistCurrentTaskSnapshot(true);
 
                 const hasUserCharacters = (task.selectedCharacters && task.selectedCharacters.length > 0)
                     || (task.characters && task.characters.length > 0);
@@ -2584,6 +2593,7 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                             renderCharacterCard(charData, true);
                             lucide.createIcons();
                         });
+                        persistCurrentTaskSnapshot(true);
                         return { status: 'generated', name: char.name, charData };
                     });
 
@@ -3384,6 +3394,7 @@ Visual Energy: ${charObj.visual_energy_profile}`;
             }
             
             lucide.createIcons();
+            persistCurrentTaskSnapshot(true);
             if (keepOpen !== true) {
             closeModal();
             }
