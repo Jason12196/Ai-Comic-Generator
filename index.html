@@ -626,7 +626,7 @@
                     </div>
                     <div id="modalConfirmActions" class="hidden flex gap-3 mt-4">
                         <button type="button" id="modalDeleteBtn" onclick="deleteCharacter()" class="hidden flex-1 bg-red-50 text-red-600 border border-red-100 py-3 rounded-2xl text-xs font-bold hover:bg-red-100">删除角色</button>
-                        <button type="button" id="modalRegenBtn" onclick="generateAvatarPreview()" class="flex-1 glass-button py-3 rounded-2xl text-xs font-bold">重新生成当前角色</button>
+                        <button type="button" id="modalRegenBtn" onclick="generateAvatarPreview({ isRetry: true })" class="flex-1 glass-button py-3 rounded-2xl text-xs font-bold">重新生成当前角色</button>
                         <button type="button" onclick="saveCharacterToGrid()" class="flex-1 bg-black text-white py-3 rounded-2xl text-xs font-bold">保存并返回</button>
                     </div>
                 </div>
@@ -1822,6 +1822,40 @@
                 index = (index + 1) % messages.length;
                 setCharacterGenerationState(messages[index], { tone: 'active' });
             }, 1800);
+        }
+
+        async function getCharacterRequestStatus(requestKey) {
+            if (!requestKey) {
+                return { requestStatus: 'missing', result: null };
+            }
+
+            const response = await apiRequest('/models/image-request-status', {
+                method: 'POST',
+                body: JSON.stringify({ requestKey })
+            });
+            return response.data;
+        }
+
+        function applyCharacterGenerationResult(generation) {
+            const preview = document.getElementById('tempResultImg');
+            const imageData = generation?.imageData || generation?.images?.[0];
+            if (!imageData) {
+                throw new Error('角色设定图结果为空');
+            }
+
+            preview.src = imageData;
+            preview.classList.remove('hidden');
+            window.lastGeneratedAvatar = imageData;
+            window.lastGeneratedDesignSheet = imageData;
+
+            const cacheStatus = generation?.meta?.requestCacheStatus;
+            if (cacheStatus === 'hit') {
+                setCharacterGenerationState('角色设定图已返回（命中缓存）', { tone: 'success' });
+            } else if (cacheStatus === 'shared') {
+                setCharacterGenerationState('角色设定图已返回（复用进行中的请求）', { tone: 'success' });
+            } else {
+                setCharacterGenerationState('角色设定图已生成', { tone: 'success' });
+            }
         }
 
         function withTimeout(promise, timeoutMs, timeoutMessage) {
@@ -3179,11 +3213,12 @@ Visual Energy: ${charObj.visual_energy_profile}`;
             }
         }
 
-        async function generateAvatarPreview() {
+        async function generateAvatarPreview(options = {}) {
             const btn = document.getElementById('modalGenBtn');
             const regenBtn = document.getElementById('modalRegenBtn');
             const preview = document.getElementById('tempResultImg');
             const status = document.getElementById('charGenerationStatus');
+            const isRetry = !!options.isRetry;
             
             btn.innerText = "处理中...";
             btn.disabled = true;
@@ -3205,8 +3240,25 @@ Visual Energy: ${charObj.visual_energy_profile}`;
             );
             
             try {
+                if (isRetry) {
+                    setCharacterGenerationState('正在检查上一次角色请求结果...', { tone: 'active' });
+                    const existingRequest = await getCharacterRequestStatus(requestKey);
+                    if (existingRequest.requestStatus === 'completed' && existingRequest.result) {
+                        applyCharacterGenerationResult(existingRequest.result);
+                        btn.classList.add('hidden');
+                        document.getElementById('modalConfirmActions').classList.remove('hidden');
+                        btn.innerText = "生成角色设定图";
+                        btn.disabled = false;
+                        if (regenBtn) {
+                            regenBtn.innerText = "重新生成当前角色";
+                            regenBtn.disabled = false;
+                        }
+                        return;
+                    }
+                }
+
                 startCharacterGenerationTicker([
-                    '正在提交角色设定请求...',
+                    isRetry ? '未找到可复用结果，准备重新提交...' : '正在提交角色设定请求...',
                     '模型正在生成角色设定图...',
                     '正在等待图片结果返回...',
                     '正在校验角色图片结果...'
@@ -3220,28 +3272,16 @@ Visual Energy: ${charObj.visual_energy_profile}`;
                     preferredGoogleModel: MODELS.IMAGE_FAST,
                     requestKey
                 });
-                const imageData = generation.imageData;
-                preview.src = imageData;
-                window.lastGeneratedAvatar = imageData;
-                window.lastGeneratedDesignSheet = imageData;
-                const cacheStatus = generation.meta?.requestCacheStatus;
-                if (cacheStatus === 'hit') {
-                    setCharacterGenerationState('角色设定图已返回（命中缓存）', { tone: 'success' });
-                } else if (cacheStatus === 'shared') {
-                    setCharacterGenerationState('角色设定图已返回（复用进行中的请求）', { tone: 'success' });
-                } else {
-                    setCharacterGenerationState('角色设定图已生成', { tone: 'success' });
-                }
+                applyCharacterGenerationResult(generation);
             } catch (err) {
                 console.error("API Error:", err);
                 const errorMessage = err?.message || '未知错误';
                 setCharacterGenerationState(`生成失败：${errorMessage}`, { tone: 'error' });
-                alert("生成失败，API 报错请查看控制台: " + errorMessage);
                 preview.classList.add('hidden');
                 preview.removeAttribute('src');
                 btn.classList.remove('hidden');
                 document.getElementById('manualUploadSection').classList.remove('hidden');
-                document.getElementById('modalConfirmActions').classList.add('hidden');
+                document.getElementById('modalConfirmActions').classList.remove('hidden');
                 btn.innerText = "生成角色设定图";
                 btn.disabled = false;
                 if (regenBtn) {

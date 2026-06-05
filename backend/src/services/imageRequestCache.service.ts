@@ -8,6 +8,7 @@ type CachedImageEntry = {
 };
 
 export type ImageRequestCacheStatus = "miss" | "shared" | "hit";
+export type ImageRequestLookupStatus = "completed" | "inflight" | "missing";
 
 const DEFAULT_TTL_MS = 1000 * 60 * 30;
 
@@ -26,6 +27,30 @@ export class ImageRequestCacheService {
 
   normalizeRequestKey(requestKey: string) {
     return crypto.createHash("sha256").update(requestKey).digest("hex");
+  }
+
+  lookup(requestKey: string) {
+    this.cleanup();
+    const normalizedKey = this.normalizeRequestKey(requestKey);
+    const cached = this.completed.get(normalizedKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return {
+        status: "completed" as ImageRequestLookupStatus,
+        result: cached.value
+      };
+    }
+
+    if (this.inflight.has(normalizedKey)) {
+      return {
+        status: "inflight" as ImageRequestLookupStatus,
+        result: null
+      };
+    }
+
+    return {
+      status: "missing" as ImageRequestLookupStatus,
+      result: null
+    };
   }
 
   async getOrCreate(requestKey: string, factory: () => Promise<ImageGenerationResult>) {

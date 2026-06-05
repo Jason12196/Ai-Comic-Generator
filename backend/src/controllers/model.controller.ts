@@ -33,6 +33,10 @@ const generateImageSchema = z.object({
   params: z.record(z.string(), z.unknown()).optional()
 });
 
+const imageRequestStatusSchema = z.object({
+  requestKey: z.string().min(1)
+});
+
 export function getModels(_request: Request, response: Response) {
   response.json(successResponse(modelRouterService.listModels()));
 }
@@ -82,4 +86,17 @@ export async function generateImageByModel(request: Request, response: Response)
   } catch (error) {
     return response.status(400).json(errorResponse(error instanceof Error ? error.message : "Image generation failed"));
   }
+}
+
+export function getImageRequestStatus(request: Request, response: Response) {
+  const parsed = imageRequestStatusSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return response.status(400).json(errorResponse("Invalid request body", parsed.error.flatten()));
+  }
+
+  const lookup = imageRequestCacheService.lookup(parsed.data.requestKey);
+  return response.json(successResponse({
+    requestStatus: lookup.status,
+    result: lookup.result
+  }));
 }
